@@ -3,6 +3,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,9 +20,24 @@ from core.window import (  # noqa: E402
     ISLAND_SIZE_REDUCED,
     module_size,
 )
+import core.window as core_window  # noqa: E402
 from modules.clock_module.clock_module import ClockModule  # noqa: E402
-from PyQt6.QtCore import QEvent, QPointF, QSize, QEasingCurve, Qt  # noqa: E402
-from PyQt6.QtGui import QEnterEvent, QKeyEvent, QMouseEvent  # noqa: E402
+from PyQt6.QtCore import (  # noqa: E402
+    QEvent,
+    QPointF,
+    QRect,
+    QRectF,
+    QSize,
+    QEasingCurve,
+    Qt,
+)
+from PyQt6.QtGui import (  # noqa: E402
+    QEnterEvent,
+    QKeyEvent,
+    QMouseEvent,
+    QPaintEvent,
+    QPainter,
+)
 from PyQt6.QtTest import QTest  # noqa: E402
 
 
@@ -53,10 +69,12 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.close()
             window.deleteLater()
 
-    def test_masque_pilule_non_vide(self):
+    def test_aucun_masque_qbitmap_sur_pilule(self):
+        """T026 : le masque QBitmap a ete supprime de core/window.py ;
+        le widget ne porte plus de masque de forme (QBitmap vide)."""
         window = DynamicIslandWindow()
         try:
-            self.assertFalse(window.mask().isEmpty())
+            self.assertTrue(window.mask().isEmpty())
         finally:
             window.close()
             window.deleteLater()
@@ -187,3 +205,87 @@ class TestDynamicIslandWindow(unittest.TestCase):
         module = ClockModule()
         self.assertEqual(module_size(module, False), ISLAND_SIZE_REDUCED)
         self.assertEqual(module_size(module, True), ISLAND_SIZE_EXPANDED)
+
+    def test_chemin_ile_symmetrique_autour_du_centre_horizontal(self):
+        """T025/T026 : _island_path est un miroir gauche/droite parfait,
+        pour la taille reduite, etendue et les tailles intermediaires
+        de l'animation."""
+        window = self._create_with_clock()
+        try:
+            pas = 0.5
+            # Decalage de la grille d'echantillonnage pour ne jamais tomber
+            # exactement sur un bord du tracé (flancs, arrêtes d'arcs),
+            # dont QPainterPath.contains traite les points selon la direction
+            # du contour.
+            decal_x, decal_y = 0.37, 0.21
+
+            def positions(longueur, decal):
+                return [
+                    decal + i * pas
+                    for i in range(__import__("math").ceil((longueur - 2 * decal) / pas))
+                ]
+
+            def miroir_x(x, centre_x):
+                return 2.0 * centre_x - x
+
+            for largeur, hauteur in (
+                ISLAND_SIZE_REDUCED,
+                ISLAND_SIZE_EXPANDED,
+                (400, 80),
+            ):
+                with self.subTest(taille=(largeur, hauteur)):
+                    rect = QRectF(0, 0, largeur, hauteur)
+                    chemin = window._island_path(rect)
+                    centre_x = largeur / 2.0
+
+                    # Balayage d'une grille strictement interieure au tracé :
+                    # un point et son miroir selon l'axe x = centre_x doivent
+                    # etre simultanement dedans ou dehors du tracé.
+                    for px in positions(largeur, decal_x):
+                        px_miroir = miroir_x(px, centre_x)
+                        for py in positions(hauteur, decal_y):
+                            self.assertEqual(
+                                chemin.contains(QPointF(px, py)),
+                                chemin.contains(QPointF(px_miroir, py)),
+                                f"asymetrie gauche/droite en ({px}, {py}) "
+                                f"pour {largeur}x{hauteur}",
+                            )
+                    # Flanc gauche net : le remplissage touche exactement x = 0
+                    # et ne depasse pas a x < 0 (pas de decalage de pixel).
+                    self.assertTrue(chemin.contains(QPointF(0.5, 10.0)))
+                    self.assertFalse(chemin.contains(QPointF(-0.5, 10.0)))
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_paint_event_definit_conseil_rendu_antialiasing(self):
+        """T026 : paintEvent active explicitement l'antialiasing du QPainter."""
+        window = self._create_with_clock()
+        try:
+            appels = []
+
+            class EspionPeintre(QPainter):
+                """QPainter espion qui enregistre les appels a setRenderHint."""
+
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    EspionPeintre.derniere_instance = self
+
+                def setRenderHint(self, hint, on=True):  # noqa: A002
+                    appels.append((hint, bool(on)))
+                    super().setRenderHint(hint, on)
+
+            EspionPeintre.derniere_instance = None
+            appels.clear()
+
+            with mock.patch.object(core_window, "QPainter", EspionPeintre):
+                window.paintEvent(QPaintEvent(QRect(window.rect())))
+
+            self.assertIn(
+                (QPainter.RenderHint.Antialiasing, True),
+                appels,
+                "setRenderHint(Antialiasing, True) doit etre appele dans paintEvent",
+            )
+        finally:
+            window.close()
+            window.deleteLater()

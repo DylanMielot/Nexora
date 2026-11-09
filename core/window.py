@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QRectF, QSize, QVariantAnimation, Qt
-from PyQt6.QtGui import QBitmap, QColor, QPainter, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QStackedLayout, QVBoxLayout, QWidget
 
 from core.base_module import BaseModule
@@ -15,23 +15,10 @@ from core.design import DesignTokens, ThemeManager
 # Geometrie de l'ile : reduction (200x40) <-> etendue (600x120).
 ISLAND_SIZE_REDUCED = (200, 40)
 ISLAND_SIZE_EXPANDED = (600, 120)
-# Evasement du sommet de la pilule au contact de Y=0 (specification T025).
-# Pixels logiques, applique un leger elargissement aux deux coins hauts.
-ISLAND_TOP_FLARE_PX = 2.0
 ANIMATION_DURATION_MS = 300
 
-# QPainter.RenderHint.HighQualityAntialiasing existe dans Qt5 ; il a ete
-# retire de Qt6 (version installee ici). La combinaison ci-dessous se degrade
-# gracieusement : Antialiasing + SmoothPixmapTransform restent actifs dans
-# tous les cas, HighQualityAntialiasing s'ajoute quand disponible.
-try:  # pragma: no cover - depend de la version Qt installee
-    _RENDER_HINTS_QUALITY = (
-        QPainter.RenderHint.Antialiasing
-        | QPainter.RenderHint.HighQualityAntialiasing
-        | QPainter.RenderHint.SmoothPixmapTransform
-    )
-except AttributeError:  # Qt6 : HighQualityAntialiasing indisponible
-    _RENDER_HINTS_QUALITY = QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+# Débord concave des coins hauts de l'île (effet "coule" sur le bord d'écran).
+ISLAND_TOP_FLARE_PX = 2.0
 
 
 class DynamicIslandWindow(QWidget):
@@ -85,7 +72,7 @@ class DynamicIslandWindow(QWidget):
         else:
             # Pilule vide par defaut quand aucun module n'est disponible.
             self.setFixedSize(*ISLAND_SIZE_REDUCED)
-            self._regenerate_mask()
+            self.update()
         self._position_on_primary_screen()
 
     # ------------------------------------------------------------------ module
@@ -118,7 +105,7 @@ class DynamicIslandWindow(QWidget):
 
         if module is None:
             self.setFixedSize(*ISLAND_SIZE_REDUCED)
-            self._regenerate_mask()
+            self.update()
             self._position_on_primary_screen()
             return
 
@@ -142,7 +129,7 @@ class DynamicIslandWindow(QWidget):
 
         width, height = module.get_reduced_size()
         self.setFixedSize(int(width), int(height))
-        self._regenerate_mask()
+        self.update()
         self._position_on_primary_screen()
 
     def _install_child_event_filter(self, widget: QWidget | None) -> None:
@@ -249,7 +236,6 @@ class DynamicIslandWindow(QWidget):
         end_value = self._animation.endValue()
         if isinstance(end_value, QSize) and end_value.isValid():
             self.setFixedSize(end_value.width(), end_value.height())
-            self._regenerate_mask()
             self.update()
         self._animation.setStartValue(QSize(self.width(), self.height()))
         self._animation.setEndValue(QSize(int(width), int(height)))
@@ -263,7 +249,6 @@ class DynamicIslandWindow(QWidget):
         size = QSize(value)
         self.setFixedSize(size.width(), size.height())
         self._recenter_horizontally()
-        self._regenerate_mask()
         self.update()
 
     def _recenter_horizontally(self) -> None:
@@ -286,7 +271,6 @@ class DynamicIslandWindow(QWidget):
         """Garantit la taille exacte a la fin de l'animation."""
         end = QSize(self._animation.endValue())
         self.setFixedSize(end.width(), end.height())
-        self._regenerate_mask()
         self.update()
         # La taille est stable : affiche le contenu du module pour l'etat
         # final, sans risque d'artefact visuel pendant la transition.
@@ -295,72 +279,58 @@ class DynamicIslandWindow(QWidget):
     # ------------------------------------------------------------------ dessin
 
     def _island_path(self, rect: QRectF) -> QPainterPath:
-        """Chemin de forme de l'ile : sommet everse, coins bas arrondis.
+        """Chemin de forme de l'ile : sommet en contact Y=0 avec un flare
+        concave symmetrique aux deux coins hauts, flancs verticaux nets et
+        coins bas largement arrondis.
 
-        Le sommet n'est plus a angle droit : un faible evasement concave vers
-        l'exterieur (ISLAND_TOP_FLARE_PX) elargit visuellement la pilule a son
-        point d'attache sur Y=0 (effet "coule" du bord de l'ecran). Les coins
-        bas conservent pill_radius_bottom.
-
-        pill_radius_top reste lu dans les jetons pour l'API, mais le sommet
-        utilise desormais l'evasement flare plutot que ce rayon.
-
-        Construction (sens horaire depuis le coin haut gauche) :
-        1. moveTo(x, y) : contact haut gauche, largeur pleine a Y=0.
-        2. lineTo(x + w, y) : arête haute pleine largeur.
-        3. arcTo flare haut-droit : amene le courant a (x + w - f, y + f).
-        4. lineTo descend le cote droit jusqu'a la base du coin bas droit.
-        5. Coins bas arrondis (inchanges) : se termine en (x, y + h - rb).
-        6. lineTo remonte le cote gauche jusqu'a la base du flare haut-gauche.
-        7. arcTo flare haut-gauche : amene le courant a (x, y), point de depart.
-        8. closeSubpath().
-
-        arcTo part de 3 heures ; les balayages negatifs tournent dans le sens
-        horaire visuel (axe y vers le bas). Chaque arc debute sur son ellipse.
+        Le tracé est continu et fermé (closeSubpath). Aucun coin haut carré :
+        le bord supérieur est en contact avec Y=0 sur toute la largeur, puis
+        chaque coin haut exécute une courbe concave (cubicTo) débordant
+        légèrement vers l'extérieur (ISLAND_TOP_FLARE_PX) avant le flanc
+        vertical. Les rayons sont clampés sur w/2 et h/2.
         """
         x, y = rect.x(), rect.y()
         w, h = rect.width(), rect.height()
+        flare = ISLAND_TOP_FLARE_PX
         rb = min(self._tokens.pill_radius_bottom, w / 2.0, h / 2.0)
-        f = min(ISLAND_TOP_FLARE_PX, w / 2.0, h / 2.0)
 
         path = QPainterPath()
-        # 1-2. Arête haute pleine largeur (contact Y=0).
+        # Contact haut gauche a Y=0 (bord supérieur de l'ecran, aimantation).
         path.moveTo(x, y)
+        # Arête supérieure pleine largeur jusqu'au contact haut droit.
         path.lineTo(x + w, y)
-        # 3. Flare haut-droit : (x + w, y) -> (x + w - f, y + f), courbe vers l'exterieur.
-        path.arcTo(QRectF(x + w - 2 * f, y - f, 2 * f, 2 * f), 0.0, -90.0)
-        # 4. Cote droit jusqu'a la base du coin bas droit.
-        path.lineTo(x + w - f, y + h - rb)
-        # 5. Coins bas (bloc inchangé vs version precedente).
-        if rb > 0:
-            path.arcTo(
-                QRectF(x + w - 2 * rb, y + h - 2 * rb, 2 * rb, 2 * rb),
-                0.0,
-                -90.0,
-            )
+        # Flare haut droit : courbe concave symétrique du flare gauche.
+        path.cubicTo(
+            x + w - flare, y + flare,
+            x + w - flare, y + 2 * flare,
+            x + w, y + 2 * flare,
+        )
+        # Flanc droit vertical, net, jusqu'à la base du coin bas droit.
+        path.lineTo(x + w, y + h - rb)
+        # Coin bas droit arrondi (rayon pill_radius_bottom).
+        path.arcTo(
+            QRectF(x + w - 2 * rb, y + h - 2 * rb, 2 * rb, 2 * rb),
+            0.0,
+            -90.0,
+        )
+        # Fond.
         path.lineTo(x + rb, y + h)
-        if rb > 0:
-            path.arcTo(QRectF(x, y + h - 2 * rb, 2 * rb, 2 * rb), 270.0, -90.0)
-        # 6. Remontee du cote gauche jusqu'a la base du flare haut-gauche.
-        path.lineTo(x + f, y + h - rb)
-        path.lineTo(x + f, y + f)
-        # 7. Flare haut-gauche : (x + f, y + f) -> (x, y), point de depart.
-        path.arcTo(QRectF(x, y - f, 2 * f, 2 * f), -90.0, -90.0)
-        # 8. Fermeture du sous-chemin.
+        # Coin bas gauche arrondi (rayon pill_radius_bottom).
+        path.arcTo(
+            QRectF(x, y + h - 2 * rb, 2 * rb, 2 * rb),
+            270.0,
+            -90.0,
+        )
+        # Flanc gauche vertical, net, jusqu'à la base du flare haut gauche.
+        path.lineTo(x, y + 2 * flare)
+        # Flare haut gauche : courbe concave revenant au contact Y=0.
+        path.cubicTo(
+            x + flare, y + 2 * flare,
+            x + flare, y + flare,
+            x, y,
+        )
         path.closeSubpath()
         return path
-
-    def _regenerate_mask(self) -> None:
-        """Regenerer le masque QBitmap en pilule a chaque changement de taille."""
-        size = self.size()
-        bitmap = QBitmap(size)
-        bitmap.fill(Qt.GlobalColor.color0)
-        painter = QPainter(bitmap)
-        painter.setRenderHints(_RENDER_HINTS_QUALITY, True)
-        path = self._island_path(QRectF(0, 0, size.width(), size.height()))
-        painter.fillPath(path, Qt.GlobalColor.color1)
-        painter.end()
-        self.setMask(bitmap)
 
     def _pill_background_color(self) -> QColor:
         """Couleur de fond de la pilule selon l'etat interactif courant."""
@@ -381,9 +351,17 @@ class DynamicIslandWindow(QWidget):
         )
 
     def paintEvent(self, event) -> None:  # noqa: ANN001
-        """Dessine la pilule themee : fond, bordure et ombre interieure."""
+        """Dessine la pilule themee : fond, bordure et ombre interieure.
+
+        L'antialiasing est explicite : sans masque QBitmap, le tracé vectoriel
+        est regénéré à chaque paintEvent et bénéficie du rendu adouci.
+        La bordure est centrée sur le tracé par QPen ; on trace donc un chemin
+        intérieur décalé de la moitié de l'épaisseur du pinceau afin que le
+        bord extérieur du trait coïncide exactement avec le contour du chemin
+        (aucun demi-pixel rogné sur la limite x=0 / y=0).
+        """
         painter = QPainter(self)
-        painter.setRenderHints(_RENDER_HINTS_QUALITY, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = QRectF(self.rect())
 
         path = self._island_path(rect)
@@ -391,9 +369,12 @@ class DynamicIslandWindow(QWidget):
         # Fond du conteneur selon l'etat interactif (survol / pression).
         painter.fillPath(path, self._pill_background_color())
 
-        # Bordure du conteneur.
+        # Bordure du conteneur, compensée d'un demi-trait vers l'intérieur.
         pen = QPen(self._tokens.pill_border)
-        painter.strokePath(path, pen)
+        pen_width = pen.widthF() if pen.widthF() > 0.0 else 1.0
+        inset = pen_width / 2.0
+        border_path = self._island_path(rect.adjusted(inset, inset, -inset, -inset))
+        painter.strokePath(border_path, pen)
 
         # Ombre interieure discrete en bas a droite (relief du conteneur).
         shadow_path = self._island_path(rect.adjusted(2, 2, 0, 0))

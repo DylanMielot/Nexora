@@ -21,7 +21,7 @@ D:\project\windows Dynamic Island\
 │   ├── __init__.py              # Package core
 │   ├── base_module.py           # Contrat abstrait BaseModule (5 méthodes)
 │   ├── module_manager.py        # Découverte, import, instanciation des modules
-│   ├── window.py                # Fenêtre pilule : paintEvent par jetons, animation, masque QBitmap
+│   ├── window.py                # Fenêtre pilule : paintEvent par jetons, animation, tracé QPainterPath, anti-aliasing
 │   └── design/                  # Système de design (nouveau, T008–T009)
 │       ├── __init__.py          # Exposition de DesignTokens, dark_tokens, light_tokens, ThemeManager
 │       ├── tokens.py            # DesignTokens (dataclass gelée, 29 champs) + light_tokens()/dark_tokens()
@@ -40,7 +40,7 @@ D:\project\windows Dynamic Island\
     ├── test_clock_module.py     # 11 tests — module horloge
     ├── test_main.py             # 2 tests — point d'entrée
     ├── test_module_manager.py   # 6 tests — gestionnaire de modules
-    ├── test_window.py           # 11 tests — fenêtre pilule
+    ├── test_window.py           # 13 tests — fenêtre pilule
     ├── test_design_tokens.py    # 9 tests — jetons de design + contraste WCAG
     ├── test_theme.py            # 11 tests — gestionnaire de thème (détection registre mockée)
     ├── test_wcag_contrast.py    # 3 tests — contraste WCAG sur fond de pilule (états normal/pressé)
@@ -164,7 +164,7 @@ Notes :
 
 - `ISLAND_SIZE_REDUCED = (200, 40)`
 - `ISLAND_SIZE_EXPANDED = (600, 120)`
-- `ISLAND_TOP_FLARE_PX = 2.0` (T025 : évasement concave du sommet de la pilule au contact Y=0)
+- `ISLAND_TOP_FLARE_PX = 2.0` (évasement concave symétrique du sommet au contact Y=0, spec T025)
 - `ANIMATION_DURATION_MS = 300`
 
 ### Drapeaux de fenêtre
@@ -175,15 +175,21 @@ Notes :
 
 ### Dessin de la pilule (`paintEvent`) via les jetons de la variante active
 
-Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`) :
+Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`). Aucun masque `QBitmap`, aucun `setMask()`, aucune feuille de style QSS : la forme est peinte directement par `QPainter` sur un `QPainterPath`.
 
-1. Chemin manuel `_island_path()` : coins hauts **carrés** (`pill_radius_top = 0` par spec) avec un léger **évasement concave symétrique** vers l'extérieur au sommet (T025, `ISLAND_TOP_FLARE_PX = 2.0`) : la pilule s'élargit discrètement à son point d'attache Y=0 ("coule" du bord de l'écran), puis se rétrécit de `f` sur chaque flanc sous le sommet (`w - 2f` de largeur sous l'évasement) avant les coins bas **arrondis** (`pill_radius_bottom = 20`). Construit avec `QPainterPath` + `arcTo` (`-90°` balayages) car cette build PyQt6 n'expose pas le paramètre coins de `addRoundedRect`. Le contour est utilisé pour le fond, la bordure et le masque `QBitmap`.
-2. Anti-aliasing : `_RENDER_HINTS_QUALITY` (`Antialiasing` + `SmoothPixmapTransform`, `HighQualityAntialiasing` ajouté quand disponible sous Qt5, try/except sous Qt6) appliqué dans `paintEvent` et `_regenerate_mask()` pour lisser les bords de la pilule.
+1. Chemin manuel `_island_path(rect)` : tracé continu et fermé (`closeSubpath`), symétrique gauche/droite :
+   - `moveTo(x, y)` : contact haut gauche à Y=0, largeur pleine au sommet ;
+   - `lineTo(x + w, y)` : arête supérieure pleine largeur ;
+   - `cubicTo` concave aux deux coins hauts : flare symétrique vers l'extérieur depuis le bord de l'écran (`ISLAND_TOP_FLARE_PX = 2.0`), effet "coule" sur le bord du moniteur ;
+   - flancs verticaux aux coordonnées entières `x` et `x + w` : zéro décalage de pixel, pas de ligne de découpe parasite ;
+   - coins bas largement arrondis (`arcTo`, rayon `pill_radius_bottom = 20`, clampé sur `w/2` et `h/2`) ;
+   - `closeSubpath()` pour fermer le contour.
+2. Anti-aliasing : `painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)` explicite dans `paintEvent` (Qt6 : `HighQualityAntialiasing` indisponible).
 3. Fond de la pilule selon l'état interactif (`_pill_background_color()`) :
    - pressé → `pill_background_pressed`
    - survol → variante plus claire de `pill_background` (mélange avec le blanc, facteur +30 %, `_lighter_variant`)
    - repos → `pill_background`
-4. Bordure : `QPen(pill_border)` sur le même chemin.
+4. Bordure : `QPen(pill_border)` tracésur un chemin intérieur décalé de `pen.widthF() / 2` (compensation d'épaisseur du pinceau) afin que le bord extérieur du trait coïncide exactement avec le contour du chemin — aucun demi-pixel rogné sur la limite `x=0` / `y=0`.
 5. Ombre intérieure discrète en bas à droite : trait `pill_shadow` sur un chemin légèrement décalé (`rect.adjusted(2, 2, 0, 0)`), donnant un effet de relief.
 
 Aucune valeur de couleur n'est en dur dans le code de production : tous les coloris viennent des jetons (`pill_background = QColor(15, 15, 15, 250)` ≈ rgba(15,15,15,0.98) en thème sombre).
@@ -204,9 +210,9 @@ Aucune valeur de couleur n'est en dur dans le code de production : tous les colo
 - Si une animation est interrompue, on snap à sa taille finale avant d'en relancer une nouvelle (pas de taille intermédiaire figée).
 - `module_size(module, expanded)` retourne les dimensions cibles d'un module (ou `ISLAND_SIZE_REDUCED`/`ISLAND_SIZE_EXPANDED` par défaut).
 
-### Masque de pilule
+### Masque de pilule — supprimé (T026)
 
-`_regenerate_mask()` régénère le masque `QBitmap` via `_island_path()` (évasement sommet symétrique, coins hauts carrés / coins bas arrondis) à chaque changement de taille (constructeur, `set_module`, animation, interruption), avec les render hints anti-aliasing de `_RENDER_HINTS_QUALITY`.
+Le masque `QBitmap` (`_regenerate_mask()` / `setMask()`) a été supprimé : un masque bitmap 1 bit est binaire et ne supporte pas l'anti-aliasing, ce qui provoquait le crénelage de l'arête gauche dans les deux modes. La transparence est désormais assurée uniquement par `WA_TranslucentBackground` combinée au tracé vectoriel de `paintEvent`.
 
 ### Position et cycle de vie
 
@@ -309,11 +315,15 @@ Pages consultées (existantes dans le dépôt) :
 | T022 | Refactor visuel : conteneur unique noir, coins hauts carrés / bas arrondis, animation 200×40 ↔ 600×120, masquage contenu pendant transition | COMPLETED |
 | T023 | Revue indépendante T021–T022 — verdict APPROVÉ (11/11 checkpoints CONFIRMED) | COMPLETED |
 | T024 | Tests : mise à jour des attentes (66 tests, tous passés) | COMPLETED |
-| T025 | Anti-aliasing des bords de la pilule + évasement concave symétrique du sommet au contact Y=0 (core/window.py uniquement) | COMPLETED |
+| T025 | Spécification technique : correction arête gauche pixelisée et courbes supérieures via QPainterPath (core/window.py) | COMPLETED |
+| T026 | Implémentation : suppression masque QBitmap, _island_path symétrique, paintEvent anti-aliasing + alignement pixels (core/window.py) | COMPLETED |
+| T027 | Revue indépendante : absence QSS, anti-aliasing activé, géométrie symétrique, alignement pixels, pas de régression | COMPLETED |
+| T028 | Tests : mise à jour test_window.py (masque supprimé, symétrie, anti-aliasing), suite 68 tests verte | COMPLETED |
+| T029 | Mise à jour ARCHITECTURE.md et registry.json (sect. 7 : tracé vectoriel, alignement pixels, masque supprimé) | COMPLETED |
 
 ## 12. Tests
 
-Suite de tests : **66 tests au total, tous passés, zéro régression**, exécutés avec `QT_QPA_PLATFORM=offscreen` (pas de serveur d'affichage requis) :
+Suite de tests : **68 tests au total, tous passés, zéro régression**, exécutés avec `QT_QPA_PLATFORM=offscreen` (pas de serveur d'affichage requis) :
 
 | Fichier de tests | Nombre de tests | Couverture |
 |------------------|-----------------|------------|
@@ -321,14 +331,14 @@ Suite de tests : **66 tests au total, tous passés, zéro régression**, exécut
 | `test_clock_module.py` | 11 | Module horloge (tailles, widgets, formats, timer, on_click, cleanup) |
 | `test_main.py` | 2 | Point d'entrée |
 | `test_module_manager.py` | 6 | Découverte, instanciation, isolation d'erreurs, répertoire inexistant |
-| `test_window.py` | 11 | Fenêtre pilule (taille, drapeaux, masque, animation, bascule, position, clavier) |
+| `test_window.py` | 13 | Fenêtre pilule (taille, drapeaux, tracé, anti-aliasing, animation, bascule, position, clavier) |
 | `test_design_tokens.py` | 9 | Jetons de design (gélure, 29 champs, valeurs exactes, contraste WCAG sur fond pilule) |
 | `test_theme.py` | 11 | Gestionnaire de thème (singleton, signal, détection registre Windows mockée/réelle, hooks) |
 | `test_wcag_contrast.py` | 3 | Contraste WCAG AA ≥ 4.5:1 sur fond pilule normal et pressé, light + dark |
 | `test_window_states.py` | 7 | États interactifs (survol, pression, eventFilter enfants, focus) |
-| **Total** | **66** | **Tous passés (OK)** |
+| **Total** | **68** | **Tous passés (OK)** |
 
-Dernière exécution confirmée : 66 tests OK en environ 1,8 s (hôte : thème sombre détecté via le registre Windows). La suite est relancée dans le cadre de la mission T017.
+Dernière exécution confirmée : 68 tests OK en environ 3,7 s (hôte : thème sombre détecté via le registre Windows). Suite relancée et validée dans le cadre de la mission T028.
 
 Les tests utilisent `tests/qt_helper.py` (QApplication partagé, plateforme offscreen, chemin racine ajouté à `sys.path` avant tout import PyQt6).
 
