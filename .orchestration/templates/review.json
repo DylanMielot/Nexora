@@ -1,0 +1,24 @@
+{
+  "type": "REVIEW",
+  "mission_id": "T001",
+  "agent": "reviewer",
+  "verdict": "changes_requested",
+  "findings": [
+    {
+      "severity": "high",
+      "file": "path/to/file",
+      "location": "function or line range",
+      "problem": "",
+      "scenario": "",
+      "impact": "",
+      "recommendation": ""
+    }
+  ],
+  "scope_reviewed": [],
+  "not_reviewed": [],
+  "evidence": {
+    "confirmed": [],
+    "assumed": [],
+    "unknown": []
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "BLOCKER",
+  "mission_id": "T001",
+  "agent": "coder",
+  "severity": "medium",
+  "description": "",
+  "impact": "",
+  "evidence": [],
+  "required_decision_or_action": "",
+  "suggested_options": []
+}

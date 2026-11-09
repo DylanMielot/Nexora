@@ -1,0 +1,17 @@
+{
+  "type": "DELEGATION_REQUEST",
+  "request_id": "D001",
+  "parent_mission": "T001",
+  "requesting_agent": "architect",
+  "suggested_agent": "reviewer",
+  "objective": "",
+  "justification": "",
+  "expected_deliverables": [],
+  "dependencies": [],
+  "scope": {
+    "files": [],
+    "constraints": []
+  },
+  "estimated_complexity": "low",
+  "reason_parallelism_helps": ""
+}

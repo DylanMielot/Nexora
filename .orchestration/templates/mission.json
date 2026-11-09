@@ -1,0 +1,23 @@
+{
+  "type": "MISSION",
+  "mission_id": "T001",
+  "parent_id": null,
+  "assigned_agent": "coder",
+  "objective": "Describe one bounded task",
+  "project_context": "Only the context necessary for this mission",
+  "context": {
+    "confirmed_facts": [],
+    "assumptions": [],
+    "relevant_decisions": [],
+    "dependencies_results": []
+  },
+  "scope": {
+    "allowed_files": [],
+    "avoid_files": [],
+    "forbidden_actions": []
+  },
+  "dependencies": [],
+  "expected_deliverables": [],
+  "acceptance_criteria": [],
+  "priority": "normal"
+}

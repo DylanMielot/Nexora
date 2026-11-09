@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "run_id": null,
+  "project": {
+    "name": "Dynamic Island Windows Core",
+    "objective": "Construire le Core de l'application Dynamic Island pour Windows (PyQt6) avec système de modules Plug-and-Play, prêt à accueillir des modules complexes (compagnon IA animé, widgets système...)."
+  },
+  "orchestration": {
+    "status": "active",
+    "max_concurrent_subagents": 3,
+    "max_correction_cycles": 2,
+    "correction_cycles": 0
+  },
+  "missions": [
+    {
+      "mission_id": "T001",
+      "parent_id": null,
+      "assigned_agent": "architect",
+      "status": "COMPLETED",
+      "objective": "Specification technique concise du Core (contrat BaseModule, decouverte dynamique, pilule/animations, points d'extension)",
+      "dependencies": [],
+      "deliverables": ["rapport de specification structure"],
+      "acceptance_criteria": ["contrat BaseModule complet (5 methodes)", "flux de decouverte des modules decrit", "mecanisme d'animation decrit", "codeur peut demarrer T002 sans question bloquante"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T002",
+      "parent_id": null,
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Implémentation du Core : core/base_module.py, core/module_manager.py, core/window.py, main.py",
+      "dependencies": ["T001"],
+      "deliverables": ["4 fichiers de production du Core"],
+      "acceptance_criteria": ["BaseModule abstrait implémenté", "ModuleManager découvre et instancie les modules", "fenêtre pill-shape avec animation fluide", "point d'entrée main.py fonctionnel"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T003",
+      "parent_id": null,
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Module de démo Horloge : modules/clock_module/",
+      "dependencies": ["T001"],
+      "deliverables": ["modules/clock_module/__init__.py", "modules/clock_module/clock_module.py"],
+      "acceptance_criteria": ["affiche HH:MM en réduit", "affiche heure + secondes + date en étendu", "hérite de BaseModule"],
+      "priority": "normal"
+    },
+    {
+      "mission_id": "T004",
+      "parent_id": null,
+      "assigned_agent": "tester",
+      "status": "COMPLETED",
+      "objective": "Tests unitaires/fonctionnels + exécution des critères d'acceptation",
+      "dependencies": ["T002", "T003"],
+      "deliverables": ["fichiers de tests", "rapport d'exécution"],
+      "acceptance_criteria": ["tests écrits et exécutés", "critères d'acceptation vérifiés"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T005",
+      "parent_id": null,
+      "assigned_agent": "reviewer",
+      "status": "COMPLETED",
+      "objective": "Revue indépendante (bugs, sécurité, maintenabilité)",
+      "dependencies": ["T002", "T003"],
+      "deliverables": ["rapport de revue", "verdict"],
+      "acceptance_criteria": ["revue effectuée", "verdict approuvé ou changements demandés"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T006",
+      "parent_id": null,
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Mémoire de transmission : ARCHITECTURE.md",
+      "dependencies": ["T002", "T003"],
+      "deliverables": ["ARCHITECTURE.md à la racine"],
+      "acceptance_criteria": ["structure des fichiers documentée", "contrat BaseModule détaillé", "layout/animations expliqués", "état d'avancement", "spécification prochaine brique (compagnon IA)"],
+      "priority": "normal"
+    },
+    {
+      "mission_id": "T007",
+      "parent_id": null,
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Correction des defects M1-M4 identifies par la revue T005 (nettoyage set_module, animation interrompue, module_id duplique, toggle sans module)",
+      "dependencies": ["T002", "T003", "T004", "T005"],
+      "deliverables": ["core/window.py corrige", "core/module_manager.py corrige"],
+      "acceptance_criteria": ["M1 corrige: cleanup des widgets et appel cleanup() du module sortant", "M2 corrige: snap a la taille finale quand animation interrompue", "M3 corrige: detection et warning sur module_id duplique", "M4 corrige: toggle ignore quand aucun module"],
+      "priority": "high"
+    }
+  ],
+  "delegation_requests": [],
+  "decisions": [],
+  "validation": {
+    "review": "completed",
+    "tests": "passed",
+    "final_status": "completed"
+  }
+}

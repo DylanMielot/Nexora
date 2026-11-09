@@ -1,0 +1,26 @@
+{
+  "type": "REPORT",
+  "mission_id": "T001",
+  "agent": "coder",
+  "status": "completed",
+  "summary": "",
+  "files_read": [],
+  "files_created": [],
+  "files_modified": [],
+  "decisions": [],
+  "commands_executed": [],
+  "verification": {
+    "status": "not_run",
+    "checks": []
+  },
+  "findings": [],
+  "delegation_requests": [],
+  "blockers": [],
+  "remaining_work": [],
+  "evidence": {
+    "confirmed": [],
+    "assumed": [],
+    "unknown": [],
+    "rejected": []
+  }
+}

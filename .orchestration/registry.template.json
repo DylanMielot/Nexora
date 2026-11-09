@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "run_id": null,
+  "project": {
+    "name": null,
+    "objective": null
+  },
+  "orchestration": {
+    "status": "idle",
+    "max_concurrent_subagents": 3,
+    "max_correction_cycles": 2,
+    "correction_cycles": 0
+  },
+  "missions": [],
+  "delegation_requests": [],
+  "decisions": [],
+  "validation": {
+    "review": "not_required",
+    "tests": "not_started",
+    "final_status": "not_started"
+  }
+}
