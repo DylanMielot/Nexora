@@ -162,8 +162,8 @@ Notes :
 
 ### Constantes de design (spécification T001, décisions D1 et D8)
 
-- `REDUCED_SIZE = (200, 60)`
-- `EXPANDED_SIZE = (400, 160)`
+- `ISLAND_SIZE_REDUCED = (200, 40)`
+- `ISLAND_SIZE_EXPANDED = (600, 120)`
 - `ANIMATION_DURATION_MS = 300`
 
 ### Drapeaux de fenêtre
@@ -176,7 +176,7 @@ Notes :
 
 Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`) :
 
-1. Chemin arrondi `QPainterPath.addRoundedRect` avec `radius = height × pill_radius_ratio` (0.5 → forme pilule).
+1. Chemin manuel `_island_path()` : coins hauts **carrés** (`pill_radius_top = 0` par spec) et coins bas **arrondis** (`pill_radius_bottom = 20`), construit avec `QPainterPath` + `arcTo` (`-90°` balayages) car cette build PyQt6 n'expose pas le paramètre coins de `addRoundedRect`. Le contour est utilisé pour le fond, la bordure et le masque `QBitmap`.
 2. Fond de la pilule selon l'état interactif (`_pill_background_color()`) :
    - pressé → `pill_background_pressed`
    - survol → variante plus claire de `pill_background` (mélange avec le blanc, facteur +30 %, `_lighter_variant`)
@@ -184,23 +184,27 @@ Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`) :
 3. Bordure : `QPen(pill_border)` sur le même chemin.
 4. Ombre intérieure discrète en bas à droite : trait `pill_shadow` sur un chemin légèrement décalé (`rect.adjusted(2, 2, 0, 0)`), donnant un effet de relief.
 
+Aucune valeur de couleur n'est en dur dans le code de production : tous les coloris viennent des jetons (`pill_background = QColor(15, 15, 15, 250)` ≈ rgba(15,15,15,0.98) en thème sombre).
+
 ### États interactifs
 
-- `enterEvent` / `leaveEvent` : activent/désactivent `_hovered` + `update()` (fond plus clair au survol).
-- `mousePressEvent` / `mouseReleaseEvent` : clic gauche active `_pressed` (fond `pill_background_pressed`) et appelle `toggle()` ; relâchement réinitialise `_pressed`.
-- `eventFilter` sur les widgets enfants (et leurs descendants, installé pour chaque widget du module) : un clic gauche sur un enfant bascule l'état de la fenêtre plutôt que d'être avalé par le widget cible (click-through de la pilule).
+- `enterEvent` / `leaveEvent` : activent/désactivent `_hovered` + `update()` (fond plus clair au survol). Le survol **déclenche** l'expansion (`expand()`), le départ de souris déclenche le repli (`collapse()`) — pas de bascule au clic (décision T020, reconduite en T022).
+- `mousePressEvent` / `mouseReleaseEvent` : clic gauche active `_pressed` (fond `pill_background_pressed`) ; relâchement réinitialise `_pressed`. Le clic sur un enfant ne bascule plus l'état de la fenêtre (l'eventFilter l'intercepte).
+- `eventFilter` sur les widgets enfants (et leurs descendants) : intercepte les événements souris gauche pour qu'un enfant ne les avale pas et que la fenêtre conserve la main sur ses états survol/pression.
 - `keyPressEvent` : touche `Escape` ferme la fenêtre (`close()`).
 
-### Animation
+### Animation et visibilité du contenu
 
 - `QVariantAnimation`, durée `ANIMATION_DURATION_MS` (300 ms), courbe `QEasingCurve.Type.InOutQuad`.
-- Anime `setFixedSize()` entre la taille actuelle et la taille cible du module.
+- Anime `setFixedSize()` entre `ISLAND_SIZE_REDUCED` (200×40) et `ISLAND_SIZE_EXPANDED` (600×120).
+- `expand()` / `collapse()` : `setCurrentIndex(1)` / `setCurrentIndex(0)` sur le `QStackedLayout`, puis `.hide()` sur le widget non actif, avant l'animation.
+- Le contenu du module actif est masqué pendant la transition (`_set_module_content_visible(False)`), puis réaffiché à `animation.finished` pour éviter les scintillements et recalculs de texte à chaque frame.
 - Si une animation est interrompue, on snap à sa taille finale avant d'en relancer une nouvelle (pas de taille intermédiaire figée).
-- `module_size(module, expanded)` retourne les dimensions cibles d'un module (ou `REDUCED_SIZE`/`EXPANDED_SIZE` par défaut).
+- `module_size(module, expanded)` retourne les dimensions cibles d'un module (ou `ISLAND_SIZE_REDUCED`/`ISLAND_SIZE_EXPANDED` par défaut).
 
 ### Masque de pilule
 
-`_regenerate_mask()` régénère le masque `QBitmap` en pilule (`addRoundedRect`, `setMask`) à chaque changement de taille (constructeur, `set_module`, animation, interruption).
+`_regenerate_mask()` régénère le masque `QBitmap` via `_island_path()` (`arcTo`, coins hauts carrés / coins bas arrondis) à chaque changement de taille (constructeur, `set_module`, animation, interruption).
 
 ### Position et cycle de vie
 
@@ -218,7 +222,7 @@ Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`) :
 
 `ClockModule(BaseModule)`, `module_id = "clock"`, `display_name = "Horloge"`. Implémente les 5 méthodes du contrat `BaseModule` :
 
-- `get_reduced_size()` → `(200, 60)` ; `get_expanded_size()` → `(400, 160)`
+- `get_reduced_size()` → `(200, 40)` ; `get_expanded_size()` → `(600, 120)` (élargis pour éviter le rognage du texte de la date, 160 px de haut ne rentrant pas dans 120 px de conteneur)
 - `get_reduced_widget()` / `get_expanded_widget()` → les deux widgets du module (propriété du module, réparent dans la pile de la fenêtre)
 - `on_click()` — démo : rafraîchit immédiatement l'affichage
 - `cleanup()` — déconnecte `theme_changed` et arrête le `QTimer` avant retrait du module
@@ -299,6 +303,10 @@ Pages consultées (existantes dans le dépôt) :
 | T015 | Réécriture d'ARCHITECTURE.md (refonte graphique) — cette mission | COMPLETED |
 | T016 | Revue indépendante d'ARCHITECTURE.md réécrit | COMPLETED |
 | T017 | Exécution de la suite de tests complète (confirmation des chiffres) | COMPLETED |
+| T021 | Spécification : conteneur unique noir magnétisé en haut de l'écran | COMPLETED |
+| T022 | Refactor visuel : conteneur unique noir, coins hauts carrés / bas arrondis, animation 200×40 ↔ 600×120, masquage contenu pendant transition | COMPLETED |
+| T023 | Revue indépendante T021–T022 — verdict APPROVÉ (11/11 checkpoints CONFIRMED) | COMPLETED |
+| T024 | Tests : mise à jour des attentes (66 tests, tous passés) | COMPLETED |
 
 ## 12. Tests
 
