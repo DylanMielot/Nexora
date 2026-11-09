@@ -164,6 +164,7 @@ Notes :
 
 - `ISLAND_SIZE_REDUCED = (200, 40)`
 - `ISLAND_SIZE_EXPANDED = (600, 120)`
+- `ISLAND_TOP_FLARE_PX = 2.0` (T025 : évasement concave du sommet de la pilule au contact Y=0)
 - `ANIMATION_DURATION_MS = 300`
 
 ### Drapeaux de fenêtre
@@ -176,13 +177,14 @@ Notes :
 
 Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`) :
 
-1. Chemin manuel `_island_path()` : coins hauts **carrés** (`pill_radius_top = 0` par spec) et coins bas **arrondis** (`pill_radius_bottom = 20`), construit avec `QPainterPath` + `arcTo` (`-90°` balayages) car cette build PyQt6 n'expose pas le paramètre coins de `addRoundedRect`. Le contour est utilisé pour le fond, la bordure et le masque `QBitmap`.
-2. Fond de la pilule selon l'état interactif (`_pill_background_color()`) :
+1. Chemin manuel `_island_path()` : coins hauts **carrés** (`pill_radius_top = 0` par spec) avec un léger **évasement concave symétrique** vers l'extérieur au sommet (T025, `ISLAND_TOP_FLARE_PX = 2.0`) : la pilule s'élargit discrètement à son point d'attache Y=0 ("coule" du bord de l'écran), puis se rétrécit de `f` sur chaque flanc sous le sommet (`w - 2f` de largeur sous l'évasement) avant les coins bas **arrondis** (`pill_radius_bottom = 20`). Construit avec `QPainterPath` + `arcTo` (`-90°` balayages) car cette build PyQt6 n'expose pas le paramètre coins de `addRoundedRect`. Le contour est utilisé pour le fond, la bordure et le masque `QBitmap`.
+2. Anti-aliasing : `_RENDER_HINTS_QUALITY` (`Antialiasing` + `SmoothPixmapTransform`, `HighQualityAntialiasing` ajouté quand disponible sous Qt5, try/except sous Qt6) appliqué dans `paintEvent` et `_regenerate_mask()` pour lisser les bords de la pilule.
+3. Fond de la pilule selon l'état interactif (`_pill_background_color()`) :
    - pressé → `pill_background_pressed`
    - survol → variante plus claire de `pill_background` (mélange avec le blanc, facteur +30 %, `_lighter_variant`)
    - repos → `pill_background`
-3. Bordure : `QPen(pill_border)` sur le même chemin.
-4. Ombre intérieure discrète en bas à droite : trait `pill_shadow` sur un chemin légèrement décalé (`rect.adjusted(2, 2, 0, 0)`), donnant un effet de relief.
+4. Bordure : `QPen(pill_border)` sur le même chemin.
+5. Ombre intérieure discrète en bas à droite : trait `pill_shadow` sur un chemin légèrement décalé (`rect.adjusted(2, 2, 0, 0)`), donnant un effet de relief.
 
 Aucune valeur de couleur n'est en dur dans le code de production : tous les coloris viennent des jetons (`pill_background = QColor(15, 15, 15, 250)` ≈ rgba(15,15,15,0.98) en thème sombre).
 
@@ -204,7 +206,7 @@ Aucune valeur de couleur n'est en dur dans le code de production : tous les colo
 
 ### Masque de pilule
 
-`_regenerate_mask()` régénère le masque `QBitmap` via `_island_path()` (`arcTo`, coins hauts carrés / coins bas arrondis) à chaque changement de taille (constructeur, `set_module`, animation, interruption).
+`_regenerate_mask()` régénère le masque `QBitmap` via `_island_path()` (évasement sommet symétrique, coins hauts carrés / coins bas arrondis) à chaque changement de taille (constructeur, `set_module`, animation, interruption), avec les render hints anti-aliasing de `_RENDER_HINTS_QUALITY`.
 
 ### Position et cycle de vie
 
@@ -307,6 +309,7 @@ Pages consultées (existantes dans le dépôt) :
 | T022 | Refactor visuel : conteneur unique noir, coins hauts carrés / bas arrondis, animation 200×40 ↔ 600×120, masquage contenu pendant transition | COMPLETED |
 | T023 | Revue indépendante T021–T022 — verdict APPROVÉ (11/11 checkpoints CONFIRMED) | COMPLETED |
 | T024 | Tests : mise à jour des attentes (66 tests, tous passés) | COMPLETED |
+| T025 | Anti-aliasing des bords de la pilule + évasement concave symétrique du sommet au contact Y=0 (core/window.py uniquement) | COMPLETED |
 
 ## 12. Tests
 

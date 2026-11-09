@@ -15,7 +15,23 @@ from core.design import DesignTokens, ThemeManager
 # Geometrie de l'ile : reduction (200x40) <-> etendue (600x120).
 ISLAND_SIZE_REDUCED = (200, 40)
 ISLAND_SIZE_EXPANDED = (600, 120)
+# Evasement du sommet de la pilule au contact de Y=0 (specification T025).
+# Pixels logiques, applique un leger elargissement aux deux coins hauts.
+ISLAND_TOP_FLARE_PX = 2.0
 ANIMATION_DURATION_MS = 300
+
+# QPainter.RenderHint.HighQualityAntialiasing existe dans Qt5 ; il a ete
+# retire de Qt6 (version installee ici). La combinaison ci-dessous se degrade
+# gracieusement : Antialiasing + SmoothPixmapTransform restent actifs dans
+# tous les cas, HighQualityAntialiasing s'ajoute quand disponible.
+try:  # pragma: no cover - depend de la version Qt installee
+    _RENDER_HINTS_QUALITY = (
+        QPainter.RenderHint.Antialiasing
+        | QPainter.RenderHint.HighQualityAntialiasing
+        | QPainter.RenderHint.SmoothPixmapTransform
+    )
+except AttributeError:  # Qt6 : HighQualityAntialiasing indisponible
+    _RENDER_HINTS_QUALITY = QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
 
 
 class DynamicIslandWindow(QWidget):
@@ -279,25 +295,43 @@ class DynamicIslandWindow(QWidget):
     # ------------------------------------------------------------------ dessin
 
     def _island_path(self, rect: QRectF) -> QPainterPath:
-        """Chemin de forme de l'ile : coins hauts carres, coins bas arrondis.
+        """Chemin de forme de l'ile : sommet everse, coins bas arrondis.
 
-        Les rayons viennent des jetons (pill_radius_top / pill_radius_bottom).
-        Cette version de PyQt6 n'expose pas le parametre coins de
-        addRoundedRect, donc le chemin est construit manuellement : coins hauts
-        carres (rayon 0 par spec), coins bas arrondis. Le sens positif de
-        arcTo est anti-horaire, les balayages de coin utilisent donc -90 degres.
+        Le sommet n'est plus a angle droit : un faible evasement concave vers
+        l'exterieur (ISLAND_TOP_FLARE_PX) elargit visuellement la pilule a son
+        point d'attache sur Y=0 (effet "coule" du bord de l'ecran). Les coins
+        bas conservent pill_radius_bottom.
+
+        pill_radius_top reste lu dans les jetons pour l'API, mais le sommet
+        utilise desormais l'evasement flare plutot que ce rayon.
+
+        Construction (sens horaire depuis le coin haut gauche) :
+        1. moveTo(x, y) : contact haut gauche, largeur pleine a Y=0.
+        2. lineTo(x + w, y) : arête haute pleine largeur.
+        3. arcTo flare haut-droit : amene le courant a (x + w - f, y + f).
+        4. lineTo descend le cote droit jusqu'a la base du coin bas droit.
+        5. Coins bas arrondis (inchanges) : se termine en (x, y + h - rb).
+        6. lineTo remonte le cote gauche jusqu'a la base du flare haut-gauche.
+        7. arcTo flare haut-gauche : amene le courant a (x, y), point de depart.
+        8. closeSubpath().
+
+        arcTo part de 3 heures ; les balayages negatifs tournent dans le sens
+        horaire visuel (axe y vers le bas). Chaque arc debute sur son ellipse.
         """
         x, y = rect.x(), rect.y()
         w, h = rect.width(), rect.height()
-        rt = min(self._tokens.pill_radius_top, w / 2.0, h / 2.0)
         rb = min(self._tokens.pill_radius_bottom, w / 2.0, h / 2.0)
+        f = min(ISLAND_TOP_FLARE_PX, w / 2.0, h / 2.0)
 
         path = QPainterPath()
-        path.moveTo(x + rt, y)
-        path.lineTo(x + w - rt, y)
-        if rt > 0:
-            path.arcTo(QRectF(x + w - 2 * rt, y, 2 * rt, 2 * rt), 90.0, -90.0)
-        path.lineTo(x + w, y + h - rb)
+        # 1-2. Arête haute pleine largeur (contact Y=0).
+        path.moveTo(x, y)
+        path.lineTo(x + w, y)
+        # 3. Flare haut-droit : (x + w, y) -> (x + w - f, y + f), courbe vers l'exterieur.
+        path.arcTo(QRectF(x + w - 2 * f, y - f, 2 * f, 2 * f), 0.0, -90.0)
+        # 4. Cote droit jusqu'a la base du coin bas droit.
+        path.lineTo(x + w - f, y + h - rb)
+        # 5. Coins bas (bloc inchangé vs version precedente).
         if rb > 0:
             path.arcTo(
                 QRectF(x + w - 2 * rb, y + h - 2 * rb, 2 * rb, 2 * rb),
@@ -307,9 +341,12 @@ class DynamicIslandWindow(QWidget):
         path.lineTo(x + rb, y + h)
         if rb > 0:
             path.arcTo(QRectF(x, y + h - 2 * rb, 2 * rb, 2 * rb), 270.0, -90.0)
-        path.lineTo(x, y + rt)
-        if rt > 0:
-            path.arcTo(QRectF(x, y, 2 * rt, 2 * rt), 180.0, -90.0)
+        # 6. Remontee du cote gauche jusqu'a la base du flare haut-gauche.
+        path.lineTo(x + f, y + h - rb)
+        path.lineTo(x + f, y + f)
+        # 7. Flare haut-gauche : (x + f, y + f) -> (x, y), point de depart.
+        path.arcTo(QRectF(x, y - f, 2 * f, 2 * f), -90.0, -90.0)
+        # 8. Fermeture du sous-chemin.
         path.closeSubpath()
         return path
 
@@ -319,7 +356,7 @@ class DynamicIslandWindow(QWidget):
         bitmap = QBitmap(size)
         bitmap.fill(Qt.GlobalColor.color0)
         painter = QPainter(bitmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHints(_RENDER_HINTS_QUALITY, True)
         path = self._island_path(QRectF(0, 0, size.width(), size.height()))
         painter.fillPath(path, Qt.GlobalColor.color1)
         painter.end()
@@ -346,7 +383,7 @@ class DynamicIslandWindow(QWidget):
     def paintEvent(self, event) -> None:  # noqa: ANN001
         """Dessine la pilule themee : fond, bordure et ombre interieure."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHints(_RENDER_HINTS_QUALITY, True)
         rect = QRectF(self.rect())
 
         path = self._island_path(rect)

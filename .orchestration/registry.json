@@ -241,7 +241,7 @@
       "mission_id": "T021",
       "parent_id": null,
       "assigned_agent": "architect",
-      "status": "COMPLETED",
+      "status": "COMPLETED"
     },
     {
       "mission_id": "T022",
@@ -275,6 +275,25 @@
       "deliverables": ["tests mis à jour (test_window, test_clock_module, test_design_tokens, test_theme)", "rapport d'exécution de la suite complète"],
       "acceptance_criteria": ["test_window mis à jour aux nouvelles constantes ISLAND_SIZE_REDUCED/EXPANDED", "test_clock_module mis à jour aux tailles (200,40)/(600,120)", "test_design_tokens mis à jour aux nouvelles valeurs dark pill_background et tokens rayons", "test_theme mis à jour à la nouvelle couleur dark", "suite complète exécutée sans régression (tests fonctionnels verts)", "rapport d'exécution fourni"],
       "priority": "high"
+    },
+    {
+      "mission_id": "T025",
+      "parent_id": null,
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "T025_Premium_AntiAliasing_And_Curves : lisser les bords de la pilule (anti-aliassage) et ajouter un faible evasement courbe vers l'exterieur au sommet (core/window.py uniquement)",
+      "dependencies": ["T022"],
+      "deliverables": [
+        "core/window.py modifie : render hints AA dans paintEvent et _regenerate_mask",
+        "_island_path avec evasement superieur concave vers l'exterieur au point d'attache Y=0"
+      ],
+      "acceptance_criteria": [
+        "paintEvent active Antialiasing + HighQualityAntialiasing (+ SmoothPixmapTransform)",
+        "_island_path : largeur pleine a Y=0, evasement concave vers l'exterieur aux deux coins hauts (~2 px), coins bas et dimensions/position/animation/masque inchanges",
+        "aucune couleur en dur dans core/window.py (tout par tokens)",
+        "suite de tests complete verte (66 tests, QT_QPA_PLATFORM=offscreen)"
+      ],
+      "priority": "normal"
     }
   ],
   "delegation_requests": [],
