@@ -241,7 +241,7 @@
       "mission_id": "T021",
       "parent_id": null,
       "assigned_agent": "architect",
-      "status": "COMPLETED",
+      "status": "COMPLETED"
     },
     {
       "mission_id": "T022",
@@ -275,6 +275,64 @@
       "deliverables": ["tests mis à jour (test_window, test_clock_module, test_design_tokens, test_theme)", "rapport d'exécution de la suite complète"],
       "acceptance_criteria": ["test_window mis à jour aux nouvelles constantes ISLAND_SIZE_REDUCED/EXPANDED", "test_clock_module mis à jour aux tailles (200,40)/(600,120)", "test_design_tokens mis à jour aux nouvelles valeurs dark pill_background et tokens rayons", "test_theme mis à jour à la nouvelle couleur dark", "suite complète exécutée sans régression (tests fonctionnels verts)", "rapport d'exécution fourni"],
       "priority": "high"
+    },
+    {
+      "mission_id": "T025",
+      "parent_id": null,
+      "assigned_agent": "architect",
+      "status": "COMPLETED",
+      "objective": "Spécification technique concise : correction arête gauche pixelisée et courbes supérieures via QPainterPath dans core/window.py (mission T025_Fix_Left_Edge_And_Curves)",
+      "dependencies": ["T024"],
+      "deliverables": ["spécification de rendu concrète (suppression masque QBitmap, tracé _island_path symétrique, règles d'alignement pixels, anti-aliasing obligatoir)"],
+      "acceptance_criteria": ["cause racine identifiée (masque QBitmap 1-bit sans anti-aliasing)", "nouveau tracé vectoriel : flare concave symétrique au sommet Y=0, flancs verticaux nets, coins bas largement arrondis", "règle d'alignement pixels prenant en compte l'épaisseur du pinceau pour éviter le rognage demi-pixel sur l'arête gauche", "aucune feuille de style QSS pour les formes", "codeur peut démarrer T026 sans question bloquante"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T026",
+      "parent_id": "T025",
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Implémenter la correction de l'arête gauche et les courbes supérieures dans core/window.py : suppression du masque QBitmap, réécriture de _island_path, révision de paintEvent avec anti-aliasing et alignement pixels",
+      "dependencies": ["T025"],
+      "deliverables": ["core/window.py modifié (sans QBitmap/setMask, _island_path symétrique, paintEvent avec Antialiasing et gestion de l'épaisseur du pinceau)"],
+      "acceptance_criteria": ["plus de QBitmap/setMask dans core/window.py", "_island_path : flare concave symétrique aux deux coins hauts au contact Y=0, flancs verticaux sans décalage de pixel, coins bas largement arrondis (pill_radius_bottom = 20)", "paintEvent : painter.setRenderHint(QPainter.RenderHint.Antialiasing, True), trait bordure avec compensation d'épaisseur de pinceau (inset demi-largeur)", "pas de couleur en dur (tous les DesignTokens)", "pas de QSS pour les formes", "rendu identique en mode réduit (200x40) et étendu (600x120), y compris tailles intermédiaires d'animation"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T027",
+      "parent_id": "T025",
+      "assigned_agent": "reviewer",
+      "status": "COMPLETED",
+      "objective": "Revue indépendante des changements T026 : absence de QSS, anti-aliasing activé, géométrie symétrique, alignement pixels, pas de régression",
+      "dependencies": ["T026"],
+      "deliverables": ["rapport de revue indépendante", "verdict final (approuvé ou changements demandés)"],
+      "acceptance_criteria": ["revue de core/window.py modifié", "vérification absence QSS pour les formes", "vérification anti-aliasing activé dans paintEvent", "vérification symétrie gauche/droite du tracé _island_path", "vérification pas de rognage demi-pixel sur l'arête gauche", "verdict final approuvé ou changements demandés"],
+      "priority": "high",
+      "verification": "VERDICT: APPROVED. All 10 review criteria CONFIRMED. No critical/high findings. F1 (low): transparent zone receives mouse events - documented trade-off. F2 (low): test_masque_pilule_non_vide replaced by test_aucun_masque_qbitmap_sur_pilule in T028. F3 (info): pill_radius_top unused but asserted by tests. F4 (info): ARCHITECTURE.md updated in T029."
+    },
+    {
+      "mission_id": "T028",
+      "parent_id": "T025",
+      "assigned_agent": "tester",
+      "status": "COMPLETED",
+      "objective": "Mettre à jour tests/test_window.py et exécuter la suite de tests complète pour vérifier T025",
+      "dependencies": ["T026"],
+      "deliverables": ["tests mis à jour (suppression/adaptation test_masque_pilule_non_vide, tests de symétrie et anti-aliasing)", "rapport d'exécution de la suite complète"],
+      "acceptance_criteria": ["test_window mis à jour (masque QBitmap supprimé, assertion adaptée)", "nouveaux tests : symétrie du tracé, présence de l'hint d'anti-aliasing", "suite complète exécutée (68 tests, QT_QPA_PLATFORM=offscreen)", "zéro régression", "rapport d'exécution fourni"],
+      "priority": "high",
+      "verification": "68/68 tests OK (0 failures, 0 errors). test_aucun_masque_qbitmap_sur_pilule OK, test_chemin_ile_symmetrique_autour_du_centre_horizontal OK, test_paint_event_definit_conseil_rendu_antialiasing OK. Zero regressions on all other 65 tests."
+    },
+    {
+      "mission_id": "T029",
+      "parent_id": "T025",
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Mettre à jour ARCHITECTURE.md (section 7 : retrait masque QBitmap, nouveau contrat tracé vectoriel, règle d'alignement pixels) et registry.json",
+      "dependencies": ["T027", "T028"],
+      "deliverables": ["ARCHITECTURE.md mis à jour", "registry.json mis à jour (missions T025-T029 passées en COMPLETED)"],
+      "acceptance_criteria": ["ARCHITECTURE.md reflète fidèlement le nouveau rendu (pas de masque QBitmap, tracé QPainterPath, anti-aliasing, alignement pixels)", "registry.json à jour avec états et verdicts", "pas de régression sur ARCHITECTURE.md existant"],
+      "priority": "high",
+      "verification": "ARCHITECTURE.md section 7 réécrite (tracé QPainterPath symétrique, flare concave Y=0, anti-aliasing explicite, compensation d'épaisseur de pinceau, masque QBitmap supprimé). Section 3 et 11-12 mises à jour. registry.json finalisé avec T025-T029 en COMPLETED et verdicts."
     }
   ],
   "delegation_requests": [],
