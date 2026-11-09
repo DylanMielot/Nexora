@@ -21,7 +21,7 @@ from core.window import (  # noqa: E402
 )
 from modules.clock_module.clock_module import ClockModule  # noqa: E402
 from PyQt6.QtCore import QEvent, QPointF, QSize, QEasingCurve, Qt  # noqa: E402
-from PyQt6.QtGui import QKeyEvent, QMouseEvent  # noqa: E402
+from PyQt6.QtGui import QEnterEvent, QKeyEvent, QMouseEvent  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
 
@@ -141,8 +141,15 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.deleteLater()
 
     def test_clic_gauche_bascule(self):
+        """T020 : le clic ne pilote plus l'etat ; le survol declenche l'agrandissement.
+
+        mousePressEvent ne bascule plus la fenetre : un clic gauche laisse la
+        pilule reduite. C'est enterEvent (survol) qui agrandit, et leaveEvent
+        qui reduit.
+        """
         window = self._create_with_clock()
         try:
+            # Un clic gauche ne declenche plus l'agrandissement de la pilule.
             event = QMouseEvent(
                 QEvent.Type.MouseButtonPress,
                 QPointF(10, 10),
@@ -152,7 +159,24 @@ class TestDynamicIslandWindow(unittest.TestCase):
             )
             window.mousePressEvent(event)
             QTest.qWait(350)
+            self.assertFalse(window.is_expanded)
+            self.assertEqual(window.size(), QSize(200, 60))
+
+            # Le survol (enter) agrandit la pilule.
+            window.enterEvent(
+                QEnterEvent(QPointF(10, 10), QPointF(10, 10), QPointF(10, 10))
+            )
+            QTest.qWait(350)
             self.assertTrue(window.is_expanded)
+            self.assertEqual(window.size(), QSize(*EXPANDED_SIZE))
+            self.assertEqual(window._stack.currentIndex(), 1)
+
+            # La sortie de la souris (leave) reduit la pilule.
+            window.leaveEvent(QEvent(QEvent.Type.Leave))
+            QTest.qWait(350)
+            self.assertFalse(window.is_expanded)
+            self.assertEqual(window.size(), QSize(*REDUCED_SIZE))
+            self.assertEqual(window._stack.currentIndex(), 0)
         finally:
             window.close()
             window.deleteLater()

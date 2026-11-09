@@ -4,21 +4,28 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QRectF, QSize, QVariantAnimation, Qt
-from PyQt6.QtGui import QBitmap, QColor, QPainter, QPainterPath
+from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QRectF, QSize, QVariantAnimation, Qt
+from PyQt6.QtGui import QBitmap, QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QStackedLayout, QVBoxLayout, QWidget
 
 from core.base_module import BaseModule
+from core.design import DesignTokens, ThemeManager
 
 # Constantes de design (specification T001, decisions D1 et D8).
 REDUCED_SIZE = (200, 60)
 EXPANDED_SIZE = (400, 160)
 ANIMATION_DURATION_MS = 300
-PILL_COLOR = QColor(25, 25, 30, 210)
 
 
 class DynamicIslandWindow(QWidget):
-    """Fenetre pilule hebergeant un module via un QStackedLayout (index 0 reduit, 1 etendu)."""
+    """Fenetre pilule hebergeant un module via un QStackedLayout (index 0 reduit, 1 etendu).
+
+    Les couleurs de la pilule proviennent des jetons de design de la variante
+    active de ThemeManager (pill_background, pill_border, pill_shadow).
+    Les etats interactifs (survol, pression) modifient le fond de la pilule :
+    pill_background_pressed pour l'etat presse, une variante plus claire de
+    pill_background pour le survol.
+    """
 
     def __init__(self, module: BaseModule | None = None, parent=None) -> None:
         super().__init__(parent)
@@ -28,19 +35,28 @@ class DynamicIslandWindow(QWidget):
         self._reduced_widget: QWidget | None = None
         self._expanded_widget: QWidget | None = None
 
+        # Etats interactifs de la pilule.
+        self._hovered = False
+        self._pressed = False
+
+        # Jeton de design du theme systeme actif.
+        self._theme_manager = ThemeManager.instance()
+        self._tokens: DesignTokens = self._theme_manager.tokens()
+        self._theme_manager.theme_changed.connect(self._on_theme_changed)
+
         # Drapeaux de fenetre : sans bordure, toujours au dessus.
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        # Layout : QVQBoxLayout marges 0 contenant un QStackedLayout.
+        # Layout : QVBoxLayout marges 0 contenant un QStackedLayout.
         self._container = QVBoxLayout(self)
         self._container.setContentsMargins(0, 0, 0, 0)
         self._stack = QStackedLayout()
         self._container.addLayout(self._stack)
 
-        # Animation de la taille fixe de la fenêtre (QSize, 300 ms, InOutQuad).
+        # Animation de la taille fixe de la fenetre (QSize, 300 ms, InOutQuad).
         self._animation = QVariantAnimation(self)
         self._animation.setDuration(ANIMATION_DURATION_MS)
         self._animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
@@ -101,10 +117,24 @@ class DynamicIslandWindow(QWidget):
         self._reduced_widget = reduced
         self._expanded_widget = expanded
 
+        # Filtre d'evenements sur les widgets enfants : un clic n'importe ou
+        # sur la pilule (y compris sur un enfant) doit basculer l'etat de la
+        # fenetre plutot que d'etre avale par le widget cible.
+        self._install_child_event_filter(reduced)
+        self._install_child_event_filter(expanded)
+
         width, height = module.get_reduced_size()
         self.setFixedSize(int(width), int(height))
         self._regenerate_mask()
         self._position_on_primary_screen()
+
+    def _install_child_event_filter(self, widget: QWidget | None) -> None:
+        """Pose le filtre d'evenements de la fenetre sur un widget et ses descendants."""
+        if widget is None:
+            return
+        widget.installEventFilter(self)
+        for child in widget.findChildren(QWidget):
+            child.installEventFilter(self)
 
     # ------------------------------------------------------------------ etats
 
@@ -114,12 +144,22 @@ class DynamicIslandWindow(QWidget):
         return self._expanded
 
     def expand(self) -> None:
-        """Passe a l'etat etendu avec animation."""
+        """Passe a l'etat etendu avec animation.
+
+        Sans module installe, rien a etendre : on sort silencieusement.
+        """
+        if self._module is None:
+            return
         self._stack.setCurrentIndex(1)
         self._animate_to(*module_size(self._module, expanded=True))
 
     def collapse(self) -> None:
-        """Passe a l'etat reduit avec animation."""
+        """Passe a l'etat reduit avec animation.
+
+        Sans module installe, rien a reduire : on sort silencieusement.
+        """
+        if self._module is None:
+            return
         self._stack.setCurrentIndex(0)
         self._animate_to(*module_size(self._module, expanded=False))
 
@@ -157,7 +197,26 @@ class DynamicIslandWindow(QWidget):
         super().showEvent(event)
         self._position_on_primary_screen()
 
+    # ------------------------------------------------------------------ theme
+
+    def _on_theme_changed(self, variant: str) -> None:  # noqa: ARG002
+        """Recharge les jetons de la nouvelle variante et redessine."""
+        self._tokens = self._theme_manager.tokens()
+        self.update()
+
     # ------------------------------------------------------------------ animation
+
+    def _set_module_content_visible(self, visible: bool) -> None:
+        """Montre ou masque le widget du module actif pendant l'animation.
+
+        Le contenu (texte HTML riche du module Horloge, etc.) ne doit etre
+        affiché ni recalcule pendant la transition de taille : cela evite les
+        scintillements et deformations a chaque frame. Il est affiche une
+        seule fois, une fois la taille finale stable.
+        """
+        widget = self._expanded_widget if self._expanded else self._reduced_widget
+        if widget is not None:
+            widget.setVisible(visible)
 
     def _animate_to(self, width: int, height: int) -> None:
         """Anime la taille fixe de la fenetre vers la cible donnee."""
@@ -172,13 +231,33 @@ class DynamicIslandWindow(QWidget):
         self._animation.setStartValue(QSize(self.width(), self.height()))
         self._animation.setEndValue(QSize(int(width), int(height)))
         self._expanded = int(width) != REDUCED_SIZE[0] or int(height) != REDUCED_SIZE[1]
+        # Masque le contenu du module pour toute la transition afin d'eviter
+        # tout calcul de layout / re-rendu de texte a chaque frame.
+        self._set_module_content_visible(False)
         self._animation.start()
 
     def _on_animation_value_changed(self, value) -> None:  # noqa: ANN001
         size = QSize(value)
         self.setFixedSize(size.width(), size.height())
+        self._recenter_horizontally()
         self._regenerate_mask()
         self.update()
+
+    def _recenter_horizontally(self) -> None:
+        """Recentre horizontalement sur l'ecran principal, position Y inchangee.
+
+        Appele a chaque frame de l'animation de taille pour contrer le
+        derapage vers la droite cause par l'agrandissement depuis le coin
+        superieur-gauche. La formule reprend celle de
+        _position_on_primary_screen :
+        X = (Largeur_ecran - Largeur_actuelle_island) // 2.
+        """
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geometry = screen.availableGeometry()
+        x = geometry.x() + (geometry.width() - self.width()) // 2
+        self.move(QPoint(x, self.y()))
 
     def _on_animation_finished(self) -> None:
         """Garantit la taille exacte a la fin de l'animation."""
@@ -186,6 +265,9 @@ class DynamicIslandWindow(QWidget):
         self.setFixedSize(end.width(), end.height())
         self._regenerate_mask()
         self.update()
+        # La taille est stable : affiche le contenu du module pour l'etat
+        # final, sans risque d'artefact visuel pendant la transition.
+        self._set_module_content_visible(True)
 
     # ------------------------------------------------------------------ dessin
 
@@ -197,27 +279,100 @@ class DynamicIslandWindow(QWidget):
         painter = QPainter(bitmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        radius = size.height() / 2.0
+        radius = size.height() * self._tokens.pill_radius_ratio
         path.addRoundedRect(0, 0, size.width(), size.height(), radius, radius)
         painter.fillPath(path, Qt.GlobalColor.color1)
         painter.end()
         self.setMask(bitmap)
 
+    def _pill_background_color(self) -> QColor:
+        """Couleur de fond de la pilule selon l'etat interactif courant."""
+        if self._pressed:
+            return self._tokens.pill_background_pressed
+        if self._hovered:
+            return self._lighter_variant(self._tokens.pill_background)
+        return self._tokens.pill_background
+
+    @staticmethod
+    def _lighter_variant(color: QColor, factor: float = 0.30) -> QColor:
+        """Variante plus claire d'une couleur (melange avec le blanc)."""
+        return QColor(
+            min(255, int(color.red() + (255 - color.red()) * factor)),
+            min(255, int(color.green() + (255 - color.green()) * factor)),
+            min(255, int(color.blue() + (255 - color.blue()) * factor)),
+            color.alpha(),
+        )
+
     def paintEvent(self, event) -> None:  # noqa: ANN001
-        """Dessine la pilule sombre semi-transparente."""
+        """Dessine la pilule themee : fond, bordure et ombre interieure."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        radius = self.height() * self._tokens.pill_radius_ratio
+        rect = QRectF(self.rect())
+
         path = QPainterPath()
-        radius = self.height() / 2.0
-        path.addRoundedRect(QRectF(self.rect()), radius, radius)
-        painter.fillPath(path, PILL_COLOR)
+        path.addRoundedRect(rect, radius, radius)
+
+        # Fond de la pilule selon l'etat interactif (survol / pression).
+        painter.fillPath(path, self._pill_background_color())
+
+        # Bordure de la pilule.
+        pen = QPen(self._tokens.pill_border)
+        painter.strokePath(path, pen)
+
+        # Ombre interieure discrete en bas a droite (relief de la pilule).
+        shadow_path = QPainterPath()
+        shadow_path.addRoundedRect(rect.adjusted(2, 2, 0, 0), radius, radius)
+        shadow_pen = QPen(self._tokens.pill_shadow)
+        painter.strokePath(shadow_path, shadow_pen)
 
     # ------------------------------------------------------------------ evenements
 
+    def enterEvent(self, event) -> None:  # noqa: ANN001
+        self._hovered = True
+        self.update()
+        self.expand()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: ANN001
+        self._hovered = False
+        self.update()
+        self.collapse()
+        super().leaveEvent(event)
+
     def mousePressEvent(self, event) -> None:  # noqa: ANN001
         if event.button() == Qt.MouseButton.LeftButton:
-            self.toggle()
+            self._pressed = True
+            self.update()
         super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: ANN001
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = False
+            self.update()
+        super().mouseReleaseEvent(event)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: ANN001
+        """Intercepte les evenements souris des widgets enfants.
+
+        Le declenchement de l'etendue reposant desormais sur le survol,
+        un clic sur un enfant ne bascule plus l'etat de la fenetre ; le
+        filtre intercepte toujours l'evenement pour qu'un enfant ne l'avale
+        pas et que la fenetre conserve la main sur ses etats survol/pression.
+        """
+        if event.type() in (
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.MouseButtonRelease,
+            QEvent.Type.MouseButtonDblClick,
+        ) and event.button() == Qt.MouseButton.LeftButton:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                self._pressed = True
+                self.update()
+            elif event.type() == QEvent.Type.MouseButtonRelease:
+                self._pressed = False
+                self.update()
+            return True  # l'enfant n'avale pas l'interaction de la fenetre
+        return super().eventFilter(watched, event)
 
     def keyPressEvent(self, event) -> None:  # noqa: ANN001
         if event.key() == Qt.Key.Key_Escape:
