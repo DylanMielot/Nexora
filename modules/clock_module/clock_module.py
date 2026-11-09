@@ -151,8 +151,8 @@ class ClockModule(BaseModule):
     module_id = "clock"
     display_name = "Horloge"
 
-    _REDUCED_SIZE = (200, 60)
-    _EXPANDED_SIZE = (400, 160)
+    _REDUCED_SIZE = (200, 40)
+    _EXPANDED_SIZE = (600, 120)
 
     def __init__(self) -> None:
         super().__init__()

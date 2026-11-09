@@ -236,6 +236,45 @@
       "deliverables": ["core/window.py corrigé (déclenchement hover, suppression clic-to-toggle, animations non superposées, contenu affiché après animation)"],
       "acceptance_criteria": ["enterEvent déclenche expand() quand la souris entre dans la pastille", "leaveEvent déclenche collapse() quand la souris quitte le widget", "mousePressEvent ne déclenche plus toggle()", "eventFilter enfants ne déclenche plus toggle() sur clic gauche", "animations ne se superposent pas (animation.stop() avant nouveau lancement dans _animate_to)", "contenu masqué pendant l'animation, affiché après animation.finished (règle T019 préservée via _set_module_content_visible)", "garde si aucun module installé (expand/collapse ignorés sans module)", "pas de régression sur les 66 tests existants (suite complète OK)"],
       "priority": "high"
+    },
+    {
+      "mission_id": "T021",
+      "parent_id": null,
+      "assigned_agent": "architect",
+      "status": "COMPLETED",
+    },
+    {
+      "mission_id": "T022",
+      "parent_id": "T021",
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Implémenter le conteneur unique noir aimanté en haut (T022_Unified_Black_Pill_Container) : refactorer core/window.py pour un seul conteneur de fond noir (token pill_background dark = QColor(15,15,15,250)), position Y=0, coins hauts carrés / coins bas arrondis 20px, animation 200x40 <-> 600x120 via QVariantAnimation, hide/show des widgets par état ; aligner ClockModule sur les nouvelles dimensions ; ajouter tokens pill_radius_top / pill_radius_bottom.",
+      "dependencies": ["T021"],
+      "deliverables": ["core/window.py refactoré", "core/design/tokens.py (2 nouveaux tokens + dark pill_background)", "modules/clock_module/clock_module.py (tailles alignées)"],
+      "acceptance_criteria": ["un seul conteneur de fond (pas de double pilule / rectangle flou indépendant)", "conteneur noir opaque rgba(15,15,15,0.98) via token pill_background dark", "position Y = top de l'écran disponible (magnétisme haut) préservée", "coins hauts carrés 0px, coins bas arrondis 20px", "même conteneur anime 200x40 (réduit) <-> 600x120 (étendu), QVariantAnimation 300ms InOutQuad", "état réduit : widget étendu caché (.hide()) ; état étendu : widget réduit caché (.hide())", "contenu masqué pendant l'animation, affiché à animation.finished (T019 préservé)", "recentrage X uniquement pendant l'animation (T018 préservé), Y figée", "pas de déclenchement par clic (T020 préservé), event-filter enfants inchangé", "pas de régression sur la suite de tests existante (hors attentes de dimensions à mettre à jour par le tester)", "pas de couleur en dur dans core/window.py (tout par tokens)"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T023",
+      "parent_id": "T021",
+      "assigned_agent": "reviewer",
+      "status": "COMPLETED",
+      "objective": "Revue indépendante du refactor T022 (conteneur unique noir aimanté en haut) : défauts, sécurité, maintenabilité, respect du design system et des conventions Windows",
+      "dependencies": ["T022"],
+      "deliverables": ["rapport de revue indépendante", "verdict final (approuvé ou changements demandés)"],
+      "acceptance_criteria": ["revue des 3 fichiers modifiés (window.py, tokens.py, clock_module.py)", "vérification des 3 règles visuelles (conteneur unique, Y=0, coins hauts carrés/bas arrondis, animation 200x40<->600x120)", "vérification de l'absence de couleur en dur dans window.py", "vérification du respect des tokens (pill_radius_top/bottom, pill_background dark)", "pas de régression fonctionnelle", "verdict final approuvé ou changements demandés"],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T024",
+      "parent_id": "T021",
+      "assigned_agent": "tester",
+      "status": "COMPLETED",
+      "objective": "Mettre à jour les tests aux nouvelles dimensions/couleurs et vérifier les critères d'acceptation de T022 ; exécuter la suite de régression complète",
+      "dependencies": ["T022"],
+      "deliverables": ["tests mis à jour (test_window, test_clock_module, test_design_tokens, test_theme)", "rapport d'exécution de la suite complète"],
+      "acceptance_criteria": ["test_window mis à jour aux nouvelles constantes ISLAND_SIZE_REDUCED/EXPANDED", "test_clock_module mis à jour aux tailles (200,40)/(600,120)", "test_design_tokens mis à jour aux nouvelles valeurs dark pill_background et tokens rayons", "test_theme mis à jour à la nouvelle couleur dark", "suite complète exécutée sans régression (tests fonctionnels verts)", "rapport d'exécution fourni"],
+      "priority": "high"
     }
   ],
   "delegation_requests": [],

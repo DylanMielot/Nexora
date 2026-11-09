@@ -12,8 +12,9 @@ from core.base_module import BaseModule
 from core.design import DesignTokens, ThemeManager
 
 # Constantes de design (specification T001, decisions D1 et D8).
-REDUCED_SIZE = (200, 60)
-EXPANDED_SIZE = (400, 160)
+# Geometrie de l'ile : reduction (200x40) <-> etendue (600x120).
+ISLAND_SIZE_REDUCED = (200, 40)
+ISLAND_SIZE_EXPANDED = (600, 120)
 ANIMATION_DURATION_MS = 300
 
 
@@ -67,7 +68,7 @@ class DynamicIslandWindow(QWidget):
             self.set_module(module)
         else:
             # Pilule vide par defaut quand aucun module n'est disponible.
-            self.setFixedSize(*REDUCED_SIZE)
+            self.setFixedSize(*ISLAND_SIZE_REDUCED)
             self._regenerate_mask()
         self._position_on_primary_screen()
 
@@ -100,7 +101,7 @@ class DynamicIslandWindow(QWidget):
         self._expanded_widget = None
 
         if module is None:
-            self.setFixedSize(*REDUCED_SIZE)
+            self.setFixedSize(*ISLAND_SIZE_REDUCED)
             self._regenerate_mask()
             self._position_on_primary_screen()
             return
@@ -147,21 +148,27 @@ class DynamicIslandWindow(QWidget):
         """Passe a l'etat etendu avec animation.
 
         Sans module installe, rien a etendre : on sort silencieusement.
+        L'etat etendu cache le widget reduit (.hide()).
         """
         if self._module is None:
             return
         self._stack.setCurrentIndex(1)
-        self._animate_to(*module_size(self._module, expanded=True))
+        if self._reduced_widget is not None:
+            self._reduced_widget.hide()
+        self._animate_to(*ISLAND_SIZE_EXPANDED)
 
     def collapse(self) -> None:
         """Passe a l'etat reduit avec animation.
 
         Sans module installe, rien a reduire : on sort silencieusement.
+        L'etat reduit cache le widget etendu (.hide()).
         """
         if self._module is None:
             return
         self._stack.setCurrentIndex(0)
-        self._animate_to(*module_size(self._module, expanded=False))
+        if self._expanded_widget is not None:
+            self._expanded_widget.hide()
+        self._animate_to(*ISLAND_SIZE_REDUCED)
 
     def toggle(self) -> None:
         """Bascule reduit/etendu : on_click du module puis animation."""
@@ -230,7 +237,7 @@ class DynamicIslandWindow(QWidget):
             self.update()
         self._animation.setStartValue(QSize(self.width(), self.height()))
         self._animation.setEndValue(QSize(int(width), int(height)))
-        self._expanded = int(width) != REDUCED_SIZE[0] or int(height) != REDUCED_SIZE[1]
+        self._expanded = int(width) != ISLAND_SIZE_REDUCED[0] or int(height) != ISLAND_SIZE_REDUCED[1]
         # Masque le contenu du module pour toute la transition afin d'eviter
         # tout calcul de layout / re-rendu de texte a chaque frame.
         self._set_module_content_visible(False)
@@ -271,6 +278,41 @@ class DynamicIslandWindow(QWidget):
 
     # ------------------------------------------------------------------ dessin
 
+    def _island_path(self, rect: QRectF) -> QPainterPath:
+        """Chemin de forme de l'ile : coins hauts carres, coins bas arrondis.
+
+        Les rayons viennent des jetons (pill_radius_top / pill_radius_bottom).
+        Cette version de PyQt6 n'expose pas le parametre coins de
+        addRoundedRect, donc le chemin est construit manuellement : coins hauts
+        carres (rayon 0 par spec), coins bas arrondis. Le sens positif de
+        arcTo est anti-horaire, les balayages de coin utilisent donc -90 degres.
+        """
+        x, y = rect.x(), rect.y()
+        w, h = rect.width(), rect.height()
+        rt = min(self._tokens.pill_radius_top, w / 2.0, h / 2.0)
+        rb = min(self._tokens.pill_radius_bottom, w / 2.0, h / 2.0)
+
+        path = QPainterPath()
+        path.moveTo(x + rt, y)
+        path.lineTo(x + w - rt, y)
+        if rt > 0:
+            path.arcTo(QRectF(x + w - 2 * rt, y, 2 * rt, 2 * rt), 90.0, -90.0)
+        path.lineTo(x + w, y + h - rb)
+        if rb > 0:
+            path.arcTo(
+                QRectF(x + w - 2 * rb, y + h - 2 * rb, 2 * rb, 2 * rb),
+                0.0,
+                -90.0,
+            )
+        path.lineTo(x + rb, y + h)
+        if rb > 0:
+            path.arcTo(QRectF(x, y + h - 2 * rb, 2 * rb, 2 * rb), 270.0, -90.0)
+        path.lineTo(x, y + rt)
+        if rt > 0:
+            path.arcTo(QRectF(x, y, 2 * rt, 2 * rt), 180.0, -90.0)
+        path.closeSubpath()
+        return path
+
     def _regenerate_mask(self) -> None:
         """Regenerer le masque QBitmap en pilule a chaque changement de taille."""
         size = self.size()
@@ -278,9 +320,7 @@ class DynamicIslandWindow(QWidget):
         bitmap.fill(Qt.GlobalColor.color0)
         painter = QPainter(bitmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        radius = size.height() * self._tokens.pill_radius_ratio
-        path.addRoundedRect(0, 0, size.width(), size.height(), radius, radius)
+        path = self._island_path(QRectF(0, 0, size.width(), size.height()))
         painter.fillPath(path, Qt.GlobalColor.color1)
         painter.end()
         self.setMask(bitmap)
@@ -307,22 +347,19 @@ class DynamicIslandWindow(QWidget):
         """Dessine la pilule themee : fond, bordure et ombre interieure."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        radius = self.height() * self._tokens.pill_radius_ratio
         rect = QRectF(self.rect())
 
-        path = QPainterPath()
-        path.addRoundedRect(rect, radius, radius)
+        path = self._island_path(rect)
 
-        # Fond de la pilule selon l'etat interactif (survol / pression).
+        # Fond du conteneur selon l'etat interactif (survol / pression).
         painter.fillPath(path, self._pill_background_color())
 
-        # Bordure de la pilule.
+        # Bordure du conteneur.
         pen = QPen(self._tokens.pill_border)
         painter.strokePath(path, pen)
 
-        # Ombre interieure discrete en bas a droite (relief de la pilule).
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(rect.adjusted(2, 2, 0, 0), radius, radius)
+        # Ombre interieure discrete en bas a droite (relief du conteneur).
+        shadow_path = self._island_path(rect.adjusted(2, 2, 0, 0))
         shadow_pen = QPen(self._tokens.pill_shadow)
         painter.strokePath(shadow_path, shadow_pen)
 
@@ -384,7 +421,7 @@ class DynamicIslandWindow(QWidget):
 def module_size(module: BaseModule | None, expanded: bool) -> tuple[int, int]:
     """Retourne les dimensions cibles d'un module (ou les valeurs par defaut)."""
     if module is None:
-        return EXPANDED_SIZE if expanded else REDUCED_SIZE
+        return ISLAND_SIZE_EXPANDED if expanded else ISLAND_SIZE_REDUCED
     if expanded:
         width, height = module.get_expanded_size()
     else:

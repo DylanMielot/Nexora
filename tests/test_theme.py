@@ -54,7 +54,7 @@ class TestThemeManager(unittest.TestCase):
         ):
             manager = ThemeManager.instance()
             self.assertEqual(manager.variant(), "dark")
-            self.assertEqual(manager.tokens().pill_background, QColor(25, 25, 30, 210))
+            self.assertEqual(manager.tokens().pill_background, QColor(15, 15, 15, 250))
             self.assertEqual(manager.tokens().accent_primary, QColor("#0A84FF"))
 
     def test_variant_et_tokens_sont_coherents_quand_detection_mockée_light(self):

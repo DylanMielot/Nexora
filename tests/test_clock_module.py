@@ -55,8 +55,8 @@ class TestClockModule(unittest.TestCase):
     def test_tailles(self):
         module = ClockModule()
         try:
-            self.assertEqual(module.get_reduced_size(), (200, 60))
-            self.assertEqual(module.get_expanded_size(), (400, 160))
+            self.assertEqual(module.get_reduced_size(), (200, 40))
+            self.assertEqual(module.get_expanded_size(), (600, 120))
         finally:
             module.cleanup()
 

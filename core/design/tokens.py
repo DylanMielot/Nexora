@@ -47,6 +47,8 @@ class DesignTokens:
     # --- Rayons (pixels logiques / ratio) -------------------------------
     pill_radius_ratio: float
     button_radius: int
+    pill_radius_top: int
+    pill_radius_bottom: int
 
     # --- Typographie ----------------------------------------------------
     font_family: str
@@ -88,6 +90,8 @@ def light_tokens() -> DesignTokens:
         # Rayons
         pill_radius_ratio=0.5,
         button_radius=8,
+        pill_radius_top=0,
+        pill_radius_bottom=20,
         # Typographie
         font_family="Segoe UI",
         font_reduced_primary_pt=20,
@@ -108,7 +112,7 @@ def dark_tokens() -> DesignTokens:
     """Jetons du theme sombre."""
     return DesignTokens(
         # Couleurs
-        pill_background=QColor(25, 25, 30, 210),
+        pill_background=QColor(15, 15, 15, 250),
         pill_background_pressed=QColor(45, 45, 50, 210),
         pill_border=QColor(90, 90, 100, 160),
         pill_shadow=QColor(0, 0, 0, 130),
@@ -128,6 +132,8 @@ def dark_tokens() -> DesignTokens:
         # Rayons
         pill_radius_ratio=0.5,
         button_radius=8,
+        pill_radius_top=0,
+        pill_radius_bottom=20,
         # Typographie
         font_family="Segoe UI",
         font_reduced_primary_pt=20,

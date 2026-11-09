@@ -15,8 +15,8 @@ from tests.qt_helper import qapp  # noqa: E402
 from core.window import (  # noqa: E402
     ANIMATION_DURATION_MS,
     DynamicIslandWindow,
-    EXPANDED_SIZE,
-    REDUCED_SIZE,
+    ISLAND_SIZE_EXPANDED,
+    ISLAND_SIZE_REDUCED,
     module_size,
 )
 from modules.clock_module.clock_module import ClockModule  # noqa: E402
@@ -36,7 +36,7 @@ class TestDynamicIslandWindow(unittest.TestCase):
     def test_sans_module_taille_reduite(self):
         window = DynamicIslandWindow()
         try:
-            self.assertEqual(window.size(), QSize(*REDUCED_SIZE))
+            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
             self.assertFalse(window.is_expanded)
         finally:
             window.close()
@@ -64,7 +64,7 @@ class TestDynamicIslandWindow(unittest.TestCase):
     def test_avec_module_taille_reduite_du_module(self):
         window = self._create_with_clock()
         try:
-            self.assertEqual(window.size(), QSize(200, 60))
+            self.assertEqual(window.size(), QSize(200, 40))
             self.assertFalse(window.is_expanded)
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
@@ -88,13 +88,13 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.expand()
             QTest.qWait(350)  # laisse l'animation de 300 ms atteindre sa fin
             self.assertTrue(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*EXPANDED_SIZE))
+            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_EXPANDED))
             self.assertEqual(window._stack.currentIndex(), 1)
 
             window.collapse()
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*REDUCED_SIZE))
+            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
             window.close()
@@ -160,7 +160,7 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.mousePressEvent(event)
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(200, 60))
+            self.assertEqual(window.size(), QSize(200, 40))
 
             # Le survol (enter) agrandit la pilule.
             window.enterEvent(
@@ -168,22 +168,22 @@ class TestDynamicIslandWindow(unittest.TestCase):
             )
             QTest.qWait(350)
             self.assertTrue(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*EXPANDED_SIZE))
+            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_EXPANDED))
             self.assertEqual(window._stack.currentIndex(), 1)
 
             # La sortie de la souris (leave) reduit la pilule.
             window.leaveEvent(QEvent(QEvent.Type.Leave))
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*REDUCED_SIZE))
+            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
             window.close()
             window.deleteLater()
 
     def test_module_size_helper(self):
-        self.assertEqual(module_size(None, False), (200, 60))
-        self.assertEqual(module_size(None, True), (400, 160))
+        self.assertEqual(module_size(None, False), ISLAND_SIZE_REDUCED)
+        self.assertEqual(module_size(None, True), ISLAND_SIZE_EXPANDED)
         module = ClockModule()
-        self.assertEqual(module_size(module, False), (200, 60))
-        self.assertEqual(module_size(module, True), (400, 160))
+        self.assertEqual(module_size(module, False), ISLAND_SIZE_REDUCED)
+        self.assertEqual(module_size(module, True), ISLAND_SIZE_EXPANDED)

@@ -27,6 +27,7 @@ _EXPECTED_FIELDS = (
     "pill_padding_h", "pill_padding_v", "pill_edge_margin", "element_gap",
     "touch_target_min",
     "pill_radius_ratio", "button_radius",
+    "pill_radius_top", "pill_radius_bottom",
     "font_family", "font_reduced_primary_pt", "font_reduced_secondary_pt",
     "font_expanded_primary_pt", "font_expanded_secondary_pt",
     "font_weight_primary", "font_weight_secondary",
@@ -117,6 +118,8 @@ class TestDesignTokens(unittest.TestCase):
         # Rayons
         self.assertEqual(tokens.pill_radius_ratio, 0.5)
         self.assertEqual(tokens.button_radius, 8)
+        self.assertEqual(tokens.pill_radius_top, 0)
+        self.assertEqual(tokens.pill_radius_bottom, 20)
         # Typographie
         self.assertEqual(tokens.font_family, "Segoe UI")
         self.assertEqual(tokens.font_reduced_primary_pt, 20)
@@ -133,10 +136,12 @@ class TestDesignTokens(unittest.TestCase):
 
     def test_valeurs_dark_conformes_specification(self):
         tokens = dark_tokens()
-        self.assertEqual(tokens.pill_background, QColor(25, 25, 30, 210))
+        self.assertEqual(tokens.pill_background, QColor(15, 15, 15, 250))
         self.assertEqual(tokens.text_primary, QColor("#F5F5F7"))
         self.assertEqual(tokens.accent_primary, QColor("#0A84FF"))
         self.assertEqual(tokens.font_weight_primary, QFont.Weight.DemiBold)
+        self.assertEqual(tokens.pill_radius_top, 0)
+        self.assertEqual(tokens.pill_radius_bottom, 20)
 
     def test_variantes_light_et_dark_differentes(self):
         self.assertNotEqual(light_tokens(), dark_tokens())
