@@ -164,7 +164,7 @@
       "mission_id": "T014",
       "parent_id": null,
       "assigned_agent": "architect",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "objective": "Specifier le contenu de la mise à jour d'ARCHITECTURE.md après la refonte graphique (T008-T013) : mapping ancien -> nouveau, design system, conformité Apple HIG et adaptations Windows",
       "dependencies": ["T013"],
       "deliverables": ["note de conception concise du contenu d'ARCHITECTURE.md", "plan de rédaction par section", "liste des fichiers de production et de tests à documenter"],

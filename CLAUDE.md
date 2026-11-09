@@ -75,7 +75,8 @@ Un spécialiste peut proposer une sous-mission dans `delegation\\\_requests` de 
 ### F. Livrer
 
 * Vérifie le diff et l'état final du dépôt.
-* Résume les changements, les vérifications réellement exécutées et leurs résultats.
+* **Mise à jour d'ARCHITECTURE.md (Obligatoire) :** Avant de clore la session, inspecte et mets à jour le fichier `ARCHITECTURE.md` à la racine. Ce fichier doit agir comme la mémoire de transmission pour le prochain agent. Assure-toi qu'il reflète fidèlement la structure actuelle des fichiers, le contrat d'interface (ex: `BaseModule`), l'état d'avancement réel et la prochaine tâche technique prioritaire bien détaillée.
+* Résume à l'utilisateur les changements, les vérifications réellement exécutées et leurs résultats.
 * Signale les limites, tests non exécutés, hypothèses et risques résiduels.
 * Ne prétends pas avoir exécuté une commande ou un test si ce n'est pas le cas.
 
