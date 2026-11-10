@@ -164,7 +164,8 @@ Notes :
 
 - `ISLAND_SIZE_REDUCED = (200, 40)`
 - `ISLAND_SIZE_EXPANDED = (600, 120)`
-- `ISLAND_TOP_FLARE_PX = 2.0` (évasement concave symétrique du sommet au contact Y=0, spec T025)
+- `ISLAND_TOP_PAD_PX = 15` (marge de sécurité invisible au-dessus de l'île, spec T030) : la fenêtre est positionnée à `geometry.top() - 15` avec une hauteur de île + 15 ; seul le corps de l'île est visible, les 15 px supérieurs étant hors-écran
+- `ISLAND_TOP_FLARE_PX = 2.0` (évasement de la courbe de Bézier supérieure dans la zone hors-écran, spec T025/T030)
 - `ANIMATION_DURATION_MS = 300`
 
 ### Drapeaux de fenêtre
@@ -177,13 +178,13 @@ Notes :
 
 Le dessin s'appuie entièrement sur `self._tokens` (jetons de `ThemeManager`). Aucun masque `QBitmap`, aucun `setMask()`, aucune feuille de style QSS : la forme est peinte directement par `QPainter` sur un `QPainterPath`.
 
-1. Chemin manuel `_island_path(rect)` : tracé continu et fermé (`closeSubpath`), symétrique gauche/droite :
-   - `moveTo(x, y)` : contact haut gauche à Y=0, largeur pleine au sommet ;
-   - `lineTo(x + w, y)` : arête supérieure pleine largeur ;
-   - `cubicTo` concave aux deux coins hauts : flare symétrique vers l'extérieur depuis le bord de l'écran (`ISLAND_TOP_FLARE_PX = 2.0`), effet "coule" sur le bord du moniteur ;
-   - flancs verticaux aux coordonnées entières `x` et `x + w` : zéro décalage de pixel, pas de ligne de découpe parasite ;
+1. Chemin manuel `_island_path(rect)` : tracé continu et fermé (`closeSubpath`), symétrique gauche/droite, avec padding invisible au-dessus de l'écran (`ISLAND_TOP_PAD_PX = 15`) :
+   - `moveTo(x, y + pad)` : contact haut gauche à fenêtre Y=pad (écran Y=0), tangente verticale ;
+   - `cubicTo` symétrique : la courbe de Bézier cubique remonte dans la zone hors-écran (fenêtre Y < pad) entre les deux contacts hauts, tangente verticale à chaque contact, puis redescend au contact droit (flare `ISLAND_TOP_FLARE_PX = 2.0`) ;
+   - flancs verticaux aux coordonnées entières `x` et `x + w` en dessous de Y=pad : zéro décalage de pixel, pas de ligne de découpe parasite ;
    - coins bas largement arrondis (`arcTo`, rayon `pill_radius_bottom = 20`, clampé sur `w/2` et `h/2`) ;
    - `closeSubpath()` pour fermer le contour.
+   - Le sommet n'est plus une ligne droite aux limites de la fenêtre : plus d'angle droit à 90° ni de ligne grise parasite au sommet.
 2. Anti-aliasing : `painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)` explicite dans `paintEvent` (Qt6 : `HighQualityAntialiasing` indisponible).
 3. Fond de la pilule selon l'état interactif (`_pill_background_color()`) :
    - pressé → `pill_background_pressed`
@@ -204,7 +205,7 @@ Aucune valeur de couleur n'est en dur dans le code de production : tous les colo
 ### Animation et visibilité du contenu
 
 - `QVariantAnimation`, durée `ANIMATION_DURATION_MS` (300 ms), courbe `QEasingCurve.Type.InOutQuad`.
-- Anime `setFixedSize()` entre `ISLAND_SIZE_REDUCED` (200×40) et `ISLAND_SIZE_EXPANDED` (600×120).
+- Anime `setFixedSize()` entre `ISLAND_SIZE_REDUCED` + `ISLAND_TOP_PAD_PX` (200×55) et `ISLAND_SIZE_EXPANDED` + `ISLAND_TOP_PAD_PX` (600×135). Le corps visible de l'île correspond aux dimensions nominales (200×40 / 600×120) ; les 15 px supérieurs sont hors-écran.
 - `expand()` / `collapse()` : `setCurrentIndex(1)` / `setCurrentIndex(0)` sur le `QStackedLayout`, puis `.hide()` sur le widget non actif, avant l'animation.
 - Le contenu du module actif est masqué pendant la transition (`_set_module_content_visible(False)`), puis réaffiché à `animation.finished` pour éviter les scintillements et recalculs de texte à chaque frame.
 - Si une animation est interrompue, on snap à sa taille finale avant d'en relancer une nouvelle (pas de taille intermédiaire figée).
@@ -216,7 +217,8 @@ Le masque `QBitmap` (`_regenerate_mask()` / `setMask()`) a été supprimé : un 
 
 ### Position et cycle de vie
 
-- Centrée horizontalement sur l'écran primaire, bord supérieur aligné en haut (`_position_on_primary_screen` via `QApplication.primaryScreen().availableGeometry()`).
+- Centrée horizontalement sur l'écran primaire, bord supérieur positionné à `geometry.top() - ISLAND_TOP_PAD_PX` afin que le contact haut visible de l'île soit à l'écran Y=0 (`_position_on_primary_screen` via `QApplication.primaryScreen().availableGeometry()`). Les 15 px supérieurs de la fenêtre sont hors-écran (zone de sécurité pour la courbe de Bézier du sommet).
+- `setContentsMargins(0, ISLAND_TOP_PAD_PX, 0, 0)` sur le `QVBoxLayout` conteneur : les widgets enfants sont décalés de 15 px vers le bas pour rester centrés sur la partie visible de l'écran (compensation du décalage hors-écran de la fenêtre).
 - Re-positionnée à chaque `showEvent`.
 - `set_module(module)` : nettoie le module sortant (`cleanup()`, `removeWidget()`, `deleteLater()`), répare les widgets dans la pile, pose le filtre d'événements sur les enfants, définit la taille réduite initiale.
 - `expand()` / `collapse()` / `toggle()` : bascule réduit/étendu ; `toggle()` appelle `on_click()` du module avant la bascule et est ignoré si aucun module.
@@ -320,6 +322,9 @@ Pages consultées (existantes dans le dépôt) :
 | T027 | Revue indépendante : absence QSS, anti-aliasing activé, géométrie symétrique, alignement pixels, pas de régression | COMPLETED |
 | T028 | Tests : mise à jour test_window.py (masque supprimé, symétrie, anti-aliasing), suite 68 tests verte | COMPLETED |
 | T029 | Mise à jour ARCHITECTURE.md et registry.json (sect. 7 : tracé vectoriel, alignement pixels, masque supprimé) | COMPLETED |
+| T030 | Correction des défauts des coins supérieurs : padding invisible, courbe de Bézier au sommet, alignement des textes (core/window.py) | COMPLETED |
+| T031 | Revue indépendante des changements T030 — verdict APPROVÉ | COMPLETED |
+| T032 | Tests : mise à jour test_window.py (tailles +15 px, y = top - 15), suite 68 tests verte | COMPLETED |
 
 ## 12. Tests
 
