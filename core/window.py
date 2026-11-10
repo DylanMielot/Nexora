@@ -17,7 +17,17 @@ ISLAND_SIZE_REDUCED = (200, 40)
 ISLAND_SIZE_EXPANDED = (600, 120)
 ANIMATION_DURATION_MS = 300
 
-# Débord concave des coins hauts de l'île (effet "coule" sur le bord d'écran).
+# Marge de securite invisible au-dessus de l'ile (hors zone visible de l'ecran).
+# La fenetre est placee virtuellement a Y = geometry.top() - 15 avec une
+# hauteur de ile + 15 : seul le corps de l'ile (de fenetre Y=15 a Y=15+hauteur
+# de l'ile) est visible, les 15 px superieurs etant hors ecran. Le contact haut
+# visible de la pilule se situe donc a fenetre Y=15 (ecran Y=0), ce qui permet a
+# la courbe de Bézier du sommet de s'eventer dans la zone hors-ecran
+# (fenetre Y < 15) sans etre tronquee par le moteur graphique Windows :
+# plus d'angle droit a 90 degres ni de ligne grise parasite au sommet.
+ISLAND_TOP_PAD_PX = 15
+
+# Debord de la courbe de Bézier superieure dans la zone hors-ecran.
 ISLAND_TOP_FLARE_PX = 2.0
 
 
@@ -54,9 +64,11 @@ class DynamicIslandWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        # Layout : QVBoxLayout marges 0 contenant un QStackedLayout.
+        # Layout : QVBoxLayout contenant un QStackedLayout. Marge superieure
+        # de ISLAND_TOP_PAD_PX pour compenser le decalage hors-ecran de la
+        # fenetre : les widgets enfants restent centres sur la partie visible.
         self._container = QVBoxLayout(self)
-        self._container.setContentsMargins(0, 0, 0, 0)
+        self._container.setContentsMargins(0, ISLAND_TOP_PAD_PX, 0, 0)
         self._stack = QStackedLayout()
         self._container.addLayout(self._stack)
 
@@ -71,7 +83,9 @@ class DynamicIslandWindow(QWidget):
             self.set_module(module)
         else:
             # Pilule vide par defaut quand aucun module n'est disponible.
-            self.setFixedSize(*ISLAND_SIZE_REDUCED)
+            self.setFixedSize(
+                ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX
+            )
             self.update()
         self._position_on_primary_screen()
 
@@ -104,7 +118,9 @@ class DynamicIslandWindow(QWidget):
         self._expanded_widget = None
 
         if module is None:
-            self.setFixedSize(*ISLAND_SIZE_REDUCED)
+            self.setFixedSize(
+                ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX
+            )
             self.update()
             self._position_on_primary_screen()
             return
@@ -128,7 +144,7 @@ class DynamicIslandWindow(QWidget):
         self._install_child_event_filter(expanded)
 
         width, height = module.get_reduced_size()
-        self.setFixedSize(int(width), int(height))
+        self.setFixedSize(int(width), int(height) + ISLAND_TOP_PAD_PX)
         self.update()
         self._position_on_primary_screen()
 
@@ -158,7 +174,9 @@ class DynamicIslandWindow(QWidget):
         self._stack.setCurrentIndex(1)
         if self._reduced_widget is not None:
             self._reduced_widget.hide()
-        self._animate_to(*ISLAND_SIZE_EXPANDED)
+        self._animate_to(
+            ISLAND_SIZE_EXPANDED[0], ISLAND_SIZE_EXPANDED[1] + ISLAND_TOP_PAD_PX
+        )
 
     def collapse(self) -> None:
         """Passe a l'etat reduit avec animation.
@@ -171,7 +189,9 @@ class DynamicIslandWindow(QWidget):
         self._stack.setCurrentIndex(0)
         if self._expanded_widget is not None:
             self._expanded_widget.hide()
-        self._animate_to(*ISLAND_SIZE_REDUCED)
+        self._animate_to(
+            ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX
+        )
 
     def toggle(self) -> None:
         """Bascule reduit/etendu : on_click du module puis animation."""
@@ -200,7 +220,7 @@ class DynamicIslandWindow(QWidget):
         width = self.width()
         height = self.height()
         x = geometry.x() + (geometry.width() - width) // 2
-        y = geometry.top()
+        y = geometry.top() - ISLAND_TOP_PAD_PX
         self.move(QPoint(x, y))
 
     def showEvent(self, event) -> None:  # noqa: ANN001
@@ -239,7 +259,11 @@ class DynamicIslandWindow(QWidget):
             self.update()
         self._animation.setStartValue(QSize(self.width(), self.height()))
         self._animation.setEndValue(QSize(int(width), int(height)))
-        self._expanded = int(width) != ISLAND_SIZE_REDUCED[0] or int(height) != ISLAND_SIZE_REDUCED[1]
+        # Les cibles passees incluent la marge ISLAND_TOP_PAD_PX sur la hauteur.
+        self._expanded = (
+            int(width) != ISLAND_SIZE_REDUCED[0]
+            or int(height) != ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX
+        )
         # Masque le contenu du module pour toute la transition afin d'eviter
         # tout calcul de layout / re-rendu de texte a chaque frame.
         self._set_module_content_visible(False)
@@ -279,31 +303,41 @@ class DynamicIslandWindow(QWidget):
     # ------------------------------------------------------------------ dessin
 
     def _island_path(self, rect: QRectF) -> QPainterPath:
-        """Chemin de forme de l'ile : sommet en contact Y=0 avec un flare
-        concave symmetrique aux deux coins hauts, flancs verticaux nets et
-        coins bas largement arrondis.
+        """Chemin de forme de l'ile avec padding invisible au-dessus.
 
-        Le tracé est continu et fermé (closeSubpath). Aucun coin haut carré :
-        le bord supérieur est en contact avec Y=0 sur toute la largeur, puis
-        chaque coin haut exécute une courbe concave (cubicTo) débordant
-        légèrement vers l'extérieur (ISLAND_TOP_FLARE_PX) avant le flanc
-        vertical. Les rayons sont clampés sur w/2 et h/2.
+        La fenetre deborde de ISLAND_TOP_PAD_PX px au-dessus de la zone
+        visible de l'ecran : le contact haut visible de la pilule se situe a
+        fenetre Y = pad (ecran Y = 0). Le sommet n'est plus une ligne droite
+        aux limites de la fenetre :
+
+        * contact haut gauche (x, y + pad) et contact haut droit
+          (x + w, y + pad) ;
+        * entre les deux, une courbe de Bézier cubique (cubicTo) symetrique
+          remonte dans la zone hors-ecran (fenetre Y < pad) avant de
+          redescendre, avec une tangente verticale a chaque contact, pour
+          fondre le flanc vertical dans le sommet sans angle ;
+        * flancs verticaux nets et coins bas largement arrondis
+          (rayon pill_radius_bottom, clampés) conserves en dessous de Y=pad.
+
+        Le tracé est continu et fermé (closeSubpath).
         """
         x, y = rect.x(), rect.y()
         w, h = rect.width(), rect.height()
+        pad = ISLAND_TOP_PAD_PX
         flare = ISLAND_TOP_FLARE_PX
+        top_contact_y = y + pad
         rb = min(self._tokens.pill_radius_bottom, w / 2.0, h / 2.0)
 
         path = QPainterPath()
-        # Contact haut gauche a Y=0 (bord supérieur de l'ecran, aimantation).
-        path.moveTo(x, y)
-        # Arête supérieure pleine largeur jusqu'au contact haut droit.
-        path.lineTo(x + w, y)
-        # Flare haut droit : courbe concave symétrique du flare gauche.
+        # Contact haut gauche (fenêtre Y=pad, écran Y=0) : tangente verticale.
+        path.moveTo(x, top_contact_y)
+        # Courbe de Bézier cubique symétrique : elle s'evente dans la zone
+        # hors-ecran (fenêtre Y < pad) entre les deux contacts hauts avec une
+        # tangente verticale a chaque contact, puis redescend au contact droit.
         path.cubicTo(
-            x + w - flare, y + flare,
-            x + w - flare, y + 2 * flare,
-            x + w, y + 2 * flare,
+            x, top_contact_y - flare,
+            x + w, top_contact_y - flare,
+            x + w, top_contact_y,
         )
         # Flanc droit vertical, net, jusqu'à la base du coin bas droit.
         path.lineTo(x + w, y + h - rb)
@@ -321,14 +355,8 @@ class DynamicIslandWindow(QWidget):
             270.0,
             -90.0,
         )
-        # Flanc gauche vertical, net, jusqu'à la base du flare haut gauche.
-        path.lineTo(x, y + 2 * flare)
-        # Flare haut gauche : courbe concave revenant au contact Y=0.
-        path.cubicTo(
-            x + flare, y + 2 * flare,
-            x + flare, y + flare,
-            x, y,
-        )
+        # Flanc gauche vertical, net, jusqu'au contact haut gauche.
+        path.lineTo(x, top_contact_y)
         path.closeSubpath()
         return path
 

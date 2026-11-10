@@ -18,6 +18,7 @@ from core.window import (  # noqa: E402
     DynamicIslandWindow,
     ISLAND_SIZE_EXPANDED,
     ISLAND_SIZE_REDUCED,
+    ISLAND_TOP_PAD_PX,
     module_size,
 )
 import core.window as core_window  # noqa: E402
@@ -52,7 +53,10 @@ class TestDynamicIslandWindow(unittest.TestCase):
     def test_sans_module_taille_reduite(self):
         window = DynamicIslandWindow()
         try:
-            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
+            self.assertEqual(
+                window.size(),
+                QSize(ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX),
+            )
             self.assertFalse(window.is_expanded)
         finally:
             window.close()
@@ -82,7 +86,10 @@ class TestDynamicIslandWindow(unittest.TestCase):
     def test_avec_module_taille_reduite_du_module(self):
         window = self._create_with_clock()
         try:
-            self.assertEqual(window.size(), QSize(200, 40))
+            self.assertEqual(
+                window.size(),
+                QSize(ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX),
+            )
             self.assertFalse(window.is_expanded)
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
@@ -106,13 +113,21 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.expand()
             QTest.qWait(350)  # laisse l'animation de 300 ms atteindre sa fin
             self.assertTrue(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_EXPANDED))
+            self.assertEqual(
+                window.size(),
+                QSize(
+                    ISLAND_SIZE_EXPANDED[0], ISLAND_SIZE_EXPANDED[1] + ISLAND_TOP_PAD_PX
+                ),
+            )
             self.assertEqual(window._stack.currentIndex(), 1)
 
             window.collapse()
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
+            self.assertEqual(
+                window.size(),
+                QSize(ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX),
+            )
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
             window.close()
@@ -138,7 +153,7 @@ class TestDynamicIslandWindow(unittest.TestCase):
         window = DynamicIslandWindow()
         try:
             window._position_on_primary_screen()
-            self.assertEqual(window.y(), geometry.top())
+            self.assertEqual(window.y(), geometry.top() - ISLAND_TOP_PAD_PX)
             self.assertEqual(
                 window.x(), geometry.x() + (geometry.width() - window.width()) // 2
             )
@@ -178,7 +193,10 @@ class TestDynamicIslandWindow(unittest.TestCase):
             window.mousePressEvent(event)
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(200, 40))
+            self.assertEqual(
+                window.size(),
+                QSize(ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX),
+            )
 
             # Le survol (enter) agrandit la pilule.
             window.enterEvent(
@@ -186,14 +204,22 @@ class TestDynamicIslandWindow(unittest.TestCase):
             )
             QTest.qWait(350)
             self.assertTrue(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_EXPANDED))
+            self.assertEqual(
+                window.size(),
+                QSize(
+                    ISLAND_SIZE_EXPANDED[0], ISLAND_SIZE_EXPANDED[1] + ISLAND_TOP_PAD_PX
+                ),
+            )
             self.assertEqual(window._stack.currentIndex(), 1)
 
             # La sortie de la souris (leave) reduit la pilule.
             window.leaveEvent(QEvent(QEvent.Type.Leave))
             QTest.qWait(350)
             self.assertFalse(window.is_expanded)
-            self.assertEqual(window.size(), QSize(*ISLAND_SIZE_REDUCED))
+            self.assertEqual(
+                window.size(),
+                QSize(ISLAND_SIZE_REDUCED[0], ISLAND_SIZE_REDUCED[1] + ISLAND_TOP_PAD_PX),
+            )
             self.assertEqual(window._stack.currentIndex(), 0)
         finally:
             window.close()
@@ -250,9 +276,13 @@ class TestDynamicIslandWindow(unittest.TestCase):
                                 f"asymetrie gauche/droite en ({px}, {py}) "
                                 f"pour {largeur}x{hauteur}",
                             )
-                    # Flanc gauche net : le remplissage touche exactement x = 0
-                    # et ne depasse pas a x < 0 (pas de decalage de pixel).
-                    self.assertTrue(chemin.contains(QPointF(0.5, 10.0)))
+                    # Contact haut visible de la pilule a fenetre Y = pad (15) :
+                    # juste sous le contact gauche (x=0.5, y=15) le tracé est
+                    # rempli ; 5 px au-dessus du contact (y=10), au flanc, il
+                    # est hors du tracé (l'evasement est reserve au sommet).
+                    self.assertTrue(chemin.contains(QPointF(0.5, 15.0)))
+                    self.assertFalse(chemin.contains(QPointF(0.5, 10.0)))
+                    # Aucune depassement a x < 0 (pas de decalage de pixel).
                     self.assertFalse(chemin.contains(QPointF(-0.5, 10.0)))
         finally:
             window.close()
