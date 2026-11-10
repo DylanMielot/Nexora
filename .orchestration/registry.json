@@ -461,6 +461,117 @@
       ],
       "priority": "high",
       "verification": "tests/test_window.py mis à jour aux nouvelles dimensions (200x55 reduit / 600x135 etendu) et y = top - 15. Suite complète 68/68 tests OK, zéro régression. Antialiasing et absence de masque QBitmap vérifiés."
+    },
+    {
+      "mission_id": "T033",
+      "parent_id": "T030",
+      "assigned_agent": "coder",
+      "status": "COMPLETED",
+      "objective": "Corriger définitivement les coins supérieurs de la Dynamic Island : padding hors-écran 20 px (Y = -20), courbe de Bézier supérieure progressive dans la zone invisible avec tangente verticale au contact, unification du fond pill_background sur QColor(15, 15, 15, 250) via les jetons pour les modes réduit et étendu, et ajustement du padding interne de l'horloge pour le centrage vertical du texte sur la zone visible",
+      "project_context": "Suite directe de T030 (padding invisible 15 px déjà implémenté). Le user demande 20 px pour éliminer définitivement l'angle 90° et la ligne parasite au sommet. Règle T026 conservée : pas de QSS, pas de QBitmap/setMask, pas de couleur en dur dans core/window.py (tout via DesignTokens).",
+      "context": {
+        "confirmed_facts": [
+          "core/window.py implémente déjà ISLAND_TOP_PAD_PX = 15, y = geometry.top() - 15, _island_path en cubicTo symétrique, anti-aliasing activé, marges layout (0, 15, 0, 0) (T030 COMPLETED, 68/68 tests)",
+          "dark_tokens().pill_background actuel = QColor(25, 25, 30, 210) ; light_tokens().pill_background = QColor(242, 242, 244, 238)"
+        ],
+        "assumptions": [
+          "Le padding de 20 px éliminera la troncature de l'anti-aliasing par Windows au sommet"
+        ],
+        "relevant_decisions": [
+          "Passage ISLAND_TOP_PAD_PX de 15 à 20 (fenêtre y = top - 20, taille (w, h + 20), marges layout (0, 20, 0, 0))",
+          "Unification couleur : dark_tokens().pill_background = QColor(15, 15, 15, 250) (rgba 15,15,15,0.98), appliqué aux modes réduit et étendu via le token partagé",
+          "Aucune couleur en dur dans core/window.py ; pas de QSS ; pas de QBitmap/setMask (règle T026)",
+          "Le flare cubicTo doit s'amorcer doucement dans la zone invisible (Y < 20) et fondre avec une tangente parfaitement verticale au contact haut (fenêtre Y = 20, écran Y = 0)"
+        ],
+        "dependencies_results": []
+      },
+      "scope": {
+        "allowed_files": ["core/window.py", "core/design/tokens.py", "modules/clock_module/clock_module.py"],
+        "avoid_files": ["tests/test_window.py", "ARCHITECTURE.md", "CLAUDE.md"],
+        "forbidden_actions": [
+          "Ne pas modifier les fichiers de test (rôle du testeur)",
+          "Ne pas modifier ARCHITECTURE.md ni CLAUDE.md",
+          "Ne pas ajouter de feuille de style QSS pour les formes",
+          "Ne pas réintroduire de masque QBitmap / setMask",
+          "Ne pas utiliser de valeurs de couleur en dur dans core/window.py (tout par DesignTokens)"
+        ]
+      },
+      "dependencies": ["T030"],
+      "expected_deliverables": ["core/window.py modifié (pad 20 px, tracé Bézier supérieur progressif, marges layout 20 px)", "core/design/tokens.py modifié (dark pill_background QColor(15,15,15,250))", "éventuellement modules/clock_module/clock_module.py (padding interne horloge)"],
+      "acceptance_criteria": [
+        "ISLAND_TOP_PAD_PX = 20 utilisé pour position (y = top - 20), taille (w, h + 20) et marges layout (0, 20, 0, 0)",
+        "_island_path : contact haut à fenêtre Y = 20, cubicTo symétrique s'évasant progressivement en Y < 20, tangente verticale aux contacts, flancs verticaux nets, coins bas arrondis conservés ; identique réduit/étendu et tailles intermédiaires d'animation",
+        "paintEvent : anti-aliasing activé, fond via jeton pill_background uniquement, pas de ligne parasite au sommet",
+        "dark_tokens().pill_background = QColor(15, 15, 15, 250) pour les deux modes",
+        "Texte de l'horloge centré verticalement sur la zone visible (compensation des 20 px invisibles)",
+        "Pas de régression fonctionnelle (position, animation, hover/pressed, filtre enfants, clavier)"
+      ],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T034",
+      "parent_id": "T033",
+      "assigned_agent": "tester",
+      "status": "COMPLETED",
+      "objective": "Mettre à jour tests/test_window.py aux attentes T033 (200×60 / 600×140, y = top - 20, contact haut fenêtre Y = 20), exécuter la suite complète et vérifier le contraste WCAG (≥ 4.5:1) avec le nouveau fond QColor(15, 15, 15, 250)",
+      "project_context": "Le testeur peut créer ou modifier les fichiers de test, mais ne doit pas modifier le code de production.",
+      "context": {
+        "confirmed_facts": [],
+        "assumptions": [],
+        "relevant_decisions": [],
+        "dependencies_results": []
+      },
+      "scope": {
+        "allowed_files": ["tests/test_window.py"],
+        "avoid_files": ["core/window.py", "core/design/tokens.py", "ARCHITECTURE.md", "CLAUDE.md"],
+        "forbidden_actions": [
+          "Ne pas modifier le code de production (core/window.py, core/design/tokens.py)",
+          "Ne pas modifier ARCHITECTURE.md ni CLAUDE.md"
+        ]
+      },
+      "dependencies": ["T033"],
+      "expected_deliverables": ["tests/test_window.py mis à jour", "rapport d'exécution de la suite complète (QT_QPA_PLATFORM=offscreen)"],
+      "acceptance_criteria": [
+        "test_window.py aux nouvelles dimensions (200×60 réduit / 600×140 étendu) et y = top - 20",
+        "Suite complète exécutée : 68 tests verts, zéro régression",
+        "Contraste WCAG AA ≥ 4.5:1 vérifié sur fond pilule avec QColor(15, 15, 15, 250), thèmes light + dark",
+        "Antialiasing et absence de masque QBitmap toujours vérifiés"
+      ],
+      "priority": "high"
+    },
+    {
+      "mission_id": "T035",
+      "parent_id": "T034",
+      "assigned_agent": "reviewer",
+      "status": "COMPLETED",
+      "objective": "Revue indépendante des changements T033 (padding 20 px, courbe Bézier supérieure, couleur unifiée, centrage horloge) : défauts, sécurité, maintenabilité, respect du design system",
+      "project_context": "Le reviewer est en lecture seule : il ne modifie aucun fichier de production ni de test.",
+      "context": {
+        "confirmed_facts": [],
+        "assumptions": [],
+        "relevant_decisions": [],
+        "dependencies_results": []
+      },
+      "scope": {
+        "allowed_files": ["core/window.py", "core/design/tokens.py"],
+        "avoid_files": ["tests/test_window.py", "ARCHITECTURE.md", "CLAUDE.md"],
+        "forbidden_actions": [
+          "Le reviewer est en lecture seule : ne pas modifier core/window.py ni core/design/tokens.py",
+          "Ne pas modifier les tests ni ARCHITECTURE.md"
+        ]
+      },
+      "dependencies": ["T034"],
+      "expected_deliverables": ["rapport de revue indépendante avec verdict (approuvé / changements demandés)"],
+      "acceptance_criteria": [
+        "core/window.py relu : absence de QSS pour les formes",
+        "absence de masque QBitmap / setMask",
+        "antialiasing activé dans paintEvent (setRenderHint Antialiasing)",
+        "courbe de Bézier supérieure symétrique (cubicTo) avec tangente verticale aux contacts, pas d'angle à 90° visible",
+        "fond de pilule homogène via jeton pill_background uniquement (pas de couleur en dur)",
+        "bordure avec compensation d'épaisseur de pinceau, pas de ligne parasite au sommet",
+        "pas de régression sur le contrat de la fenêtre (position, animation, états hover/pressed, filtre enfants, clavier)"
+      ],
+      "priority": "high"
     }
   ],
   "delegation_requests": [],

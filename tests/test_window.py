@@ -276,12 +276,12 @@ class TestDynamicIslandWindow(unittest.TestCase):
                                 f"asymetrie gauche/droite en ({px}, {py}) "
                                 f"pour {largeur}x{hauteur}",
                             )
-                    # Contact haut visible de la pilule a fenetre Y = pad (15) :
-                    # juste sous le contact gauche (x=0.5, y=15) le tracé est
-                    # rempli ; 5 px au-dessus du contact (y=10), au flanc, il
+                    # Contact haut visible de la pilule a fenetre Y = pad (20) :
+                    # juste sous le contact gauche (x=0.5, y=20) le tracé est
+                    # rempli ; 5 px au-dessus du contact (y=15), au flanc, il
                     # est hors du tracé (l'evasement est reserve au sommet).
-                    self.assertTrue(chemin.contains(QPointF(0.5, 15.0)))
-                    self.assertFalse(chemin.contains(QPointF(0.5, 10.0)))
+                    self.assertTrue(chemin.contains(QPointF(0.5, 20.0)))
+                    self.assertFalse(chemin.contains(QPointF(0.5, 15.0)))
                     # Aucune depassement a x < 0 (pas de decalage de pixel).
                     self.assertFalse(chemin.contains(QPointF(-0.5, 10.0)))
         finally:

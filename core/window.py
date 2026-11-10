@@ -18,17 +18,22 @@ ISLAND_SIZE_EXPANDED = (600, 120)
 ANIMATION_DURATION_MS = 300
 
 # Marge de securite invisible au-dessus de l'ile (hors zone visible de l'ecran).
-# La fenetre est placee virtuellement a Y = geometry.top() - 15 avec une
-# hauteur de ile + 15 : seul le corps de l'ile (de fenetre Y=15 a Y=15+hauteur
-# de l'ile) est visible, les 15 px superieurs etant hors ecran. Le contact haut
-# visible de la pilule se situe donc a fenetre Y=15 (ecran Y=0), ce qui permet a
-# la courbe de Bézier du sommet de s'eventer dans la zone hors-ecran
-# (fenetre Y < 15) sans etre tronquee par le moteur graphique Windows :
+# La fenetre est placee virtuellement a Y = geometry.top() - 20 avec une
+# hauteur de ile + 20 : seul le corps de l'ile (de fenetre Y=20 a Y=20+hauteur
+# de l'ile) est visible, les 20 px superieurs etant hors ecran. Le contact haut
+# visible de la pilule se situe donc a fenetre Y=20 (ecran Y=0), ce qui permet a
+# la courbe de Bézier du sommet de s'eventer progressivement dans la zone
+# hors-ecran (fenetre Y < 20) sans etre tronquee, et de fondre avec une
+# tangente verticale au contact haut visible (ecran Y=0) :
 # plus d'angle droit a 90 degres ni de ligne grise parasite au sommet.
-ISLAND_TOP_PAD_PX = 15
+ISLAND_TOP_PAD_PX = 20
 
 # Debord de la courbe de Bézier superieure dans la zone hors-ecran.
-ISLAND_TOP_FLARE_PX = 2.0
+# Valeur retenue : 4.0 (guidage T033 : 4.0-6.0). Le sommet de la courbe
+# remonte de 4 px au-dessus du contact (fenetre Y = 16, ecran Y = -4), entierement
+# dans la zone invisible de 20 px. Avec P0.x==P1.x et P2.x==P3.x, la tangente
+# reste parfaitement verticale aux deux contacts hauts pour toute valeur de flare.
+ISLAND_TOP_FLARE_PX = 4.0
 
 
 class DynamicIslandWindow(QWidget):
