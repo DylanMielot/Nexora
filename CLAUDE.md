@@ -32,6 +32,10 @@ Utilise ces subagents nommés plutôt que les agents intégrés génériques lor
 
 * Reformule mentalement l'objectif et les critères de réussite.
 * Inspecte le dépôt et ses conventions avant de planifier.
+* **Vérification de l'architecture :** recherche systématiquement `ARCHITECTURE.md` à la racine du projet.
+  * S'il existe, lis-le intégralement avant de planifier. Vérifie que ses informations correspondent à l'état réel du dépôt.
+  * S'il n'existe pas, prévois sa création dès la phase initiale d'analyse.
+  * Pour un nouveau projet sans code existant, établis une première architecture à partir des besoins, des contraintes et des décisions validées. Identifie clairement les éléments prévus qui ne sont pas encore implémentés.
 * Identifie les contraintes, les fichiers probablement concernés et les risques.
 * Détermine si une clarification utilisateur est indispensable.
 
@@ -75,7 +79,49 @@ Un spécialiste peut proposer une sous-mission dans `delegation\\\_requests` de 
 ### F. Livrer
 
 * Vérifie le diff et l'état final du dépôt.
-* **Mise à jour d'ARCHITECTURE.md (Obligatoire) :** Avant de clore la session, inspecte et mets à jour le fichier `ARCHITECTURE.md` à la racine. Ce fichier doit agir comme la mémoire de transmission pour le prochain agent. Assure-toi qu'il reflète fidèlement la structure actuelle des fichiers, le contrat d'interface (ex: `BaseModule`), l'état d'avancement réel et la prochaine tâche technique prioritaire bien détaillée.
+* **Création et maintenance d'ARCHITECTURE.md (OBLIGATOIRE) :**
+
+  Avant de clore chaque session de travail, tu dois vérifier que `ARCHITECTURE.md` existe à la racine du projet et qu'il reflète fidèlement l'état réel du projet.
+
+  **Si le fichier n'existe pas :**
+  * Crée `ARCHITECTURE.md` à la racine.
+  * Analyse le dépôt, les fichiers, les dépendances, les interfaces et les composants existants.
+  * Documente l'architecture réellement implémentée.
+  * Si le projet est encore au stade de la conception, distingue clairement l'architecture proposée de l'architecture implémentée.
+
+  **Si le fichier existe :**
+  * Lis son contenu avant toute modification.
+  * Préserve les informations toujours valides et les décisions architecturales antérieures.
+  * Mets à jour les sections concernées par les changements réalisés.
+  * Supprime ou corrige les informations devenues obsolètes.
+  * Ne réécris pas inutilement les sections qui restent exactes.
+
+  **Contenu attendu :**
+  Le document doit être adapté à la nature et à la complexité du projet. Il doit contenir, lorsque pertinent :
+
+  1. Vue d'ensemble et objectifs du projet.
+  2. Technologies, frameworks et dépendances principales.
+  3. Structure des dossiers et fichiers avec leurs responsabilités.
+  4. Architecture des composants, modules et services.
+  5. Contrats d'interfaces, API, modèles de données et flux de communication.
+  6. Décisions architecturales importantes et leurs justifications.
+  7. Configuration, commandes de lancement et procédures de développement.
+  8. Stratégie de tests et état des validations.
+  9. État d'avancement réel et fonctionnalités implémentées.
+  10. Limites connues, problèmes techniques et dette technique.
+  11. Prochaines priorités techniques et pistes d'évolution.
+
+  **Règles de fiabilité :**
+  * Ne documente jamais une fonctionnalité comme implémentée si elle ne l'est pas.
+  * Distingue les faits vérifiés, les hypothèses et les décisions prises.
+  * Vérifie les noms de fichiers, signatures, interfaces et dépendances dans le code avant de les documenter.
+  * Ne conserve pas de statistiques de tests obsolètes.
+  * Ne transforme pas les intentions ou propositions en décisions validées sans confirmation.
+  * N'invente jamais de structure ou de fonctionnalité pour compléter le document.
+
+  `ARCHITECTURE.md` est la mémoire technique permanente du projet. Il doit permettre à un nouvel agent de comprendre le fonctionnement du projet et de reprendre le développement sans dépendre de l'historique des conversations.
+
+  La mise à jour doit être effectuée après les changements de code et les validations, avant la clôture de la session.
 * Résume à l'utilisateur les changements, les vérifications réellement exécutées et leurs résultats.
 * Signale les limites, tests non exécutés, hypothèses et risques résiduels.
 * Ne prétends pas avoir exécuté une commande ou un test si ce n'est pas le cas.
